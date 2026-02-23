@@ -1,0 +1,35 @@
+{
+  "id": "test-short",
+  "name": "Test 15min",
+  "items": [
+    {
+      "id": "1",
+      "name": "Agua 250ml",
+      "scheduledTime": 300,
+      "nutrients": {
+        "cho": 0,
+        "na": 0
+      }
+    },
+    {
+      "id": "2",
+      "name": "Gel",
+      "scheduledTime": 600,
+      "nutrients": {
+        "cho": 25,
+        "na": 50
+      }
+    },
+    {
+      "id": "3",
+      "name": "Isotónico 250ml",
+      "scheduledTime": 900,
+      "nutrients": {
+        "cho": 15,
+        "na": 100
+      }
+    }
+  ],
+  "targetCHO": 40,
+  "targetNa": 150
+}

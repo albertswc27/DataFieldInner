@@ -1,0 +1,17 @@
+# Connect IQ generated/build artifacts
+bin/
+gen/
+mir/
+internal-mir/
+external-mir/
+*.prg
+*.prg.debug.xml
+
+# Temporary simulator output
+*.log
+*.tmp
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/

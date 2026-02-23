@@ -1,0 +1,80 @@
+{
+  "id": "demo-ironman703",
+  "name": "Ironman 70.3 Demo",
+  "items": [
+    {
+      "id": "1",
+      "name": "Gel + Agua",
+      "scheduledTime": 600,
+      "nutrients": {
+        "cho": 25,
+        "na": 50
+      }
+    },
+    {
+      "id": "2",
+      "name": "Isotónico 500ml",
+      "scheduledTime": 900,
+      "nutrients": {
+        "cho": 30,
+        "na": 200
+      }
+    },
+    {
+      "id": "3",
+      "name": "Barrita",
+      "scheduledTime": 1200,
+      "nutrients": {
+        "cho": 40,
+        "na": 80
+      }
+    },
+    {
+      "id": "4",
+      "name": "Agua 250ml",
+      "scheduledTime": 1500,
+      "nutrients": {
+        "cho": 0,
+        "na": 0
+      }
+    },
+    {
+      "id": "5",
+      "name": "Gel Cafeína",
+      "scheduledTime": 1800,
+      "nutrients": {
+        "cho": 25,
+        "na": 50
+      }
+    },
+    {
+      "id": "6",
+      "name": "Isotónico 500ml",
+      "scheduledTime": 2100,
+      "nutrients": {
+        "cho": 30,
+        "na": 200
+      }
+    },
+    {
+      "id": "7",
+      "name": "Gel",
+      "scheduledTime": 2400,
+      "nutrients": {
+        "cho": 25,
+        "na": 50
+      }
+    },
+    {
+      "id": "8",
+      "name": "Agua 250ml",
+      "scheduledTime": 2700,
+      "nutrients": {
+        "cho": 0,
+        "na": 0
+      }
+    }
+  ],
+  "targetCHO": 175,
+  "targetNa": 630
+}

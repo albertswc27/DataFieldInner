@@ -1,0 +1,43 @@
+<drawables xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
+    <bitmap id="LauncherIcon" filename="launcher_icon.svg" dithering="none" />
+
+    <!-- Product icons for alerts -->
+    <!-- Bebidas / Monodosis -->
+    <bitmap id="IconGlut5Drink" filename="ICONOS GARMIN/MONODOSIS/producto-inner-glut5drink.png" dithering="none" />
+    <bitmap id="IconIsoDrink" filename="ICONOS GARMIN/MONODOSIS/producto-inner-iso-drink.png" dithering="none" />
+    <bitmap id="IconBuffer" filename="ICONOS GARMIN/MONODOSIS/producto-inner-buffer.png" dithering="none" />
+
+    <!-- Geles 30g -->
+    <bitmap id="IconGel30Limon" filename="ICONOS GARMIN/GELES/30/producto-inner-gel-lite-30-limon.png" dithering="none" />
+    <bitmap id="IconGel30Naranja" filename="ICONOS GARMIN/GELES/30/producto-inner-gel-lite-30-naranja.png" dithering="none" />
+    <bitmap id="IconGel30Neutro" filename="ICONOS GARMIN/GELES/30/producto-inner-gel-lite-30-neutro.png" dithering="none" />
+    <bitmap id="IconGel30Caramelo" filename="ICONOS GARMIN/GELES/30/producto-inner-gel-lite-30-caramelo.png" dithering="none" />
+
+    <!-- Geles 35g -->
+    <bitmap id="IconGelHydro35Fresa" filename="ICONOS GARMIN/GELES/35/producto-inner-gel-35-fresa.png" dithering="none" />
+    <bitmap id="IconGelHydro35Platano" filename="ICONOS GARMIN/GELES/35/producto-inner-gel-35-platano.png" dithering="none" />
+
+    <!-- Geles 45g -->
+    <bitmap id="IconGelHydro45Cafe" filename="ICONOS GARMIN/GELES/45/producto-inner-gel-45-cafe.png" dithering="none" />
+    <bitmap id="IconGelHydro45Neutro" filename="ICONOS GARMIN/GELES/45/producto-inner-gel-45-neutro.png" dithering="none" />
+    <bitmap id="IconGelHydro45Naranja" filename="ICONOS GARMIN/GELES/45/producto-inner-gel-45-naranja.png" dithering="none" />
+
+    <!-- Geles 60g -->
+    <bitmap id="IconGel60Limon" filename="ICONOS GARMIN/GELES/60/producto-inner-gel-60-limon.png" dithering="none" />
+    <bitmap id="IconGel60Naranja" filename="ICONOS GARMIN/GELES/60/producto-inner-gel-60-naranja.png" dithering="none" />
+    <bitmap id="IconGel60Neutro" filename="ICONOS GARMIN/GELES/60/producto-inner-gel-60-neutro.png" dithering="none" />
+    <bitmap id="IconGel60Caramelo" filename="ICONOS GARMIN/GELES/60/producto-inner-gel-60-caramelo.png" dithering="none" />
+    <bitmap id="IconGel60Frambuesa" filename="ICONOS GARMIN/GELES/60/producto-inner-gel-60-frambuesa.png" dithering="none" />
+
+    <!-- Barritas / Gominolas -->
+    <bitmap id="IconElectroGummy" filename="ICONOS GARMIN/BARRITAS/producto-inner-electro-gummy.png" dithering="none" />
+    <bitmap id="IconCarboGummy" filename="ICONOS GARMIN/BARRITAS/producto-inner-carbo-gummy.png" dithering="none" />
+    <bitmap id="IconCarboGummyFresa" filename="ICONOS GARMIN/BARRITAS/producto-inner-carbo-gummy-fresa.png" dithering="none" />
+
+    <!-- Otros -->
+    <bitmap id="IconElectrolytes" filename="ICONOS GARMIN/MONODOSIS/sales-iconos-inner-garmin.png" dithering="none" />
+    <bitmap id="IconTartCherry" filename="ICONOS GARMIN/OTROS/producto-inner-tart-cherry.png" dithering="none" />
+    <bitmap id="IconAgua150" filename="ICONOS GARMIN/MONODOSIS/agua-150ml-iconos-inner-garmin.png" dithering="none" />
+    <bitmap id="IconAgua250" filename="ICONOS GARMIN/MONODOSIS/agua-250ml-iconos-inner-garmin.png" dithering="none" />
+    <bitmap id="IconCafeina" filename="ICONOS GARMIN/OTROS/producto-inner-electrolytes-lite.png" dithering="none" />
+</drawables>

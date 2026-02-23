@@ -1,0 +1,37 @@
+﻿<strings xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
+    <string id="AppName">INNER Nutricion</string>
+
+    <!-- Settings Titles -->
+    <string id="PlanTitle">Plan de Nutricion (JSON)</string>
+    <string id="SelectedPlanTitle">ID de Plan Seleccionado</string>
+    <string id="VibrationTitle">Alertas de Vibracion</string>
+    <string id="VibrationIntensityTitle">Intensidad de Vibracion</string>
+    <string id="SoundTitle">Alertas de Sonido</string>
+    <string id="ToleranceTitle">Ventana de Alerta (segundos)</string>
+    <string id="AutoAdvanceTitle">Avanzar Automaticamente</string>
+    <string id="ShowCountdownTitle">Mostrar Cuenta Atras</string>
+    <string id="ShowNutrientsTitle">Mostrar Nutrientes</string>
+    <string id="UseFreeModeTitle">Usar Modo Libre</string>
+    <string id="FreeItemNameTitle">Nombre Item Modo Libre</string>
+    <string id="FreeIntervalTitle">Intervalo Modo Libre (s)</string>
+    <string id="FreeCHOTitle">CHO por Item Modo Libre (g)</string>
+    <string id="FreeNaTitle">Na por Item Modo Libre (mg)</string>
+    <string id="FreeMaxDurationTitle">Duracion Max Modo Libre (min)</string>
+
+    <!-- Settings Values -->
+    <string id="Low">Baja</string>
+    <string id="Medium">Media</string>
+    <string id="High">Alta</string>
+
+    <!-- Data Field Labels -->
+    <string id="NextLabel">Proximo:</string>
+    <string id="InLabel">en</string>
+    <string id="NowLabel">AHORA!</string>
+    <string id="CompletedLabel">Plan Completado</string>
+    <string id="NoPlanLabel">Sin Plan</string>
+
+    <!-- Alert Labels -->
+    <string id="DrinkLabel">Beber</string>
+    <string id="EatLabel">Comer</string>
+    <string id="OkButton">OK</string>
+</strings>

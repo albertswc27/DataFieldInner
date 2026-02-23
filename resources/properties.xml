@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources>
+    <properties>
+        <!-- Sync Configuration -->
+        <property id="pairingCode" type="string">UVE-KXH</property>
+        <property id="apiUrl" type="string">https://us-central1-fanteinner-4fd38.cloudfunctions.net</property>
+        
+        <!-- Nutrition Plan JSON (synced from web app or manual) -->
+        <property id="nutritionPlan" type="string"></property>
+        <property id="nutritionPlans" type="string"></property>
+        <property id="selectedPlanId" type="string"></property>
+        
+        <!-- Alert Preferences -->
+        <property id="vibrationEnabled" type="boolean">true</property>
+        <property id="soundEnabled" type="boolean">true</property>
+        <property id="vibrationIntensity" type="number">2</property><!-- 1=Low, 2=Medium, 3=High -->
+        
+        <!-- Timing Configuration -->
+        <property id="toleranceSec" type="number">30</property>
+        <property id="autoAdvance" type="boolean">true</property>
+        <property id="autoConsumePlannedItems" type="boolean">true</property>
+        
+        <!-- Display Options -->
+        <property id="showCountdown" type="boolean">true</property>
+        <property id="showNutrients" type="boolean">true</property>
+
+        <!-- Free Mode -->
+        <property id="useFreeMode" type="boolean">false</property>
+        <property id="freeIntervalSec" type="number">900</property>
+        <property id="freeCHO" type="number">25</property>
+        <property id="freeNa" type="number">150</property>
+        <property id="freeItemName" type="string">Recordatorio</property>
+        <property id="freeMaxDurationMin" type="number">480</property>
+    </properties>
+    
+    <settings>
+        <!-- Sync Configuration -->
+        <setting propertyKey="@Properties.pairingCode" title="@Strings.PairingCodeTitle">
+            <settingConfig type="alphaNumeric" />
+        </setting>
+        
+        <setting propertyKey="@Properties.apiUrl" title="@Strings.ApiUrlTitle">
+            <settingConfig type="alphaNumeric" />
+        </setting>
+        
+        <!-- Nutrition Plan -->
+        <setting propertyKey="@Properties.nutritionPlan" title="@Strings.PlanTitle">
+            <settingConfig type="alphaNumeric" />
+        </setting>
+
+        <setting propertyKey="@Properties.selectedPlanId" title="@Strings.SelectedPlanTitle">
+            <settingConfig type="alphaNumeric" />
+        </setting>
+        
+        <!-- Vibration Settings -->
+        <setting propertyKey="@Properties.vibrationEnabled" title="@Strings.VibrationTitle">
+            <settingConfig type="boolean" />
+        </setting>
+        
+        <setting propertyKey="@Properties.vibrationIntensity" title="@Strings.VibrationIntensityTitle">
+            <settingConfig type="list">
+                <listEntry value="1">@Strings.Low</listEntry>
+                <listEntry value="2">@Strings.Medium</listEntry>
+                <listEntry value="3">@Strings.High</listEntry>
+            </settingConfig>
+        </setting>
+        
+        <!-- Sound Settings -->
+        <setting propertyKey="@Properties.soundEnabled" title="@Strings.SoundTitle">
+            <settingConfig type="boolean" />
+        </setting>
+        
+        <!-- Timing Settings -->
+        <setting propertyKey="@Properties.toleranceSec" title="@Strings.ToleranceTitle">
+            <settingConfig type="numeric" min="0" max="300" />
+        </setting>
+        
+        <setting propertyKey="@Properties.autoAdvance" title="@Strings.AutoAdvanceTitle">
+            <settingConfig type="boolean" />
+        </setting>
+
+        <setting propertyKey="@Properties.autoConsumePlannedItems" title="@Strings.AutoConsumePlannedItemsTitle">
+            <settingConfig type="boolean" />
+        </setting>
+        
+        <!-- Display Settings -->
+        <setting propertyKey="@Properties.showCountdown" title="@Strings.ShowCountdownTitle">
+            <settingConfig type="boolean" />
+        </setting>
+        
+        <setting propertyKey="@Properties.showNutrients" title="@Strings.ShowNutrientsTitle">
+            <settingConfig type="boolean" />
+        </setting>
+
+        <!-- Free Mode -->
+        <setting propertyKey="@Properties.useFreeMode" title="@Strings.UseFreeModeTitle">
+            <settingConfig type="boolean" />
+        </setting>
+
+        <setting propertyKey="@Properties.freeItemName" title="@Strings.FreeItemNameTitle">
+            <settingConfig type="alphaNumeric" />
+        </setting>
+
+        <setting propertyKey="@Properties.freeIntervalSec" title="@Strings.FreeIntervalTitle">
+            <settingConfig type="numeric" min="60" max="7200" />
+        </setting>
+
+        <setting propertyKey="@Properties.freeCHO" title="@Strings.FreeCHOTitle">
+            <settingConfig type="numeric" min="0" max="200" />
+        </setting>
+
+        <setting propertyKey="@Properties.freeNa" title="@Strings.FreeNaTitle">
+            <settingConfig type="numeric" min="0" max="2000" />
+        </setting>
+
+        <setting propertyKey="@Properties.freeMaxDurationMin" title="@Strings.FreeMaxDurationTitle">
+            <settingConfig type="numeric" min="30" max="1800" />
+        </setting>
+    </settings>
+    
+    <strings>
+        <string id="AppName">INNER Nutrition</string>
+        
+        <!-- Sync Settings -->
+        <string id="PairingCodeTitle">Pairing Code (from web)</string>
+        <string id="ApiUrlTitle">API URL</string>
+        
+        <!-- Settings Titles -->
+        <string id="PlanTitle">Nutrition Plan (JSON)</string>
+        <string id="SelectedPlanTitle">Selected Plan ID</string>
+        <string id="VibrationTitle">Vibration Alerts</string>
+        <string id="VibrationIntensityTitle">Vibration Intensity</string>
+        <string id="SoundTitle">Sound Alerts</string>
+        <string id="ToleranceTitle">Alert Window (seconds)</string>
+        <string id="AutoAdvanceTitle">Auto-advance Items</string>
+        <string id="AutoConsumePlannedItemsTitle">Auto-consume Plan Items</string>
+        <string id="ShowCountdownTitle">Show Countdown</string>
+        <string id="ShowNutrientsTitle">Show Nutrients</string>
+        <string id="UseFreeModeTitle">Use Free Mode</string>
+        <string id="FreeItemNameTitle">Free Mode Item Name</string>
+        <string id="FreeIntervalTitle">Free Mode Interval (sec)</string>
+        <string id="FreeCHOTitle">Free Mode CHO per Item (g)</string>
+        <string id="FreeNaTitle">Free Mode Na per Item (mg)</string>
+        <string id="FreeMaxDurationTitle">Free Mode Max Duration (min)</string>
+        
+        <!-- Settings Values -->
+        <string id="Low">Low</string>
+        <string id="Medium">Medium</string>
+        <string id="High">High</string>
+        
+        <!-- Data Field Labels -->
+        <string id="NextLabel">Next:</string>
+        <string id="InLabel">in</string>
+        <string id="NowLabel">NOW!</string>
+        <string id="CompletedLabel">Plan Complete</string>
+        <string id="NoPlanLabel">No Plan</string>
+        
+        <!-- Alert Labels -->
+        <string id="DrinkLabel">Drink</string>
+        <string id="EatLabel">Eat</string>
+        <string id="OkButton">OK</string>
+    </strings>
+</resources>
