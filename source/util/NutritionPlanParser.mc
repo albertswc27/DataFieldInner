@@ -134,15 +134,43 @@ class NutritionPlanParser {
         if (nutrientsJson != null) {
             cho = extractNumberValue(nutrientsJson as String, "cho");
             na = extractNumberValue(nutrientsJson as String, "na");
+            if (cho == 0) {
+                cho = extractNumberValueOr(nutrientsJson as String, "carbs", cho);
+            }
+            if (cho == 0) {
+                cho = extractNumberValueOr(nutrientsJson as String, "carbohydrates", cho);
+            }
+            if (na == 0) {
+                na = extractNumberValueOr(nutrientsJson as String, "sodium", na);
+            }
+            if (na == 0) {
+                na = extractNumberValueOr(nutrientsJson as String, "sodiumMg", na);
+            }
         }
 
         // Support payloads where nutrients are top-level fields.
         cho = extractNumberValueOr(itemJson, "cho", cho);
         na = extractNumberValueOr(itemJson, "na", na);
+        cho = extractNumberValueOr(itemJson, "carbs", cho);
+        cho = extractNumberValueOr(itemJson, "carbohydrates", cho);
+        cho = extractNumberValueOr(itemJson, "choGrams", cho);
+        na = extractNumberValueOr(itemJson, "sodium", na);
+        na = extractNumberValueOr(itemJson, "sodiumMg", na);
+        na = extractNumberValueOr(itemJson, "naMg", na);
 
         var iconKey = extractStringValue(itemJson, "iconKey");
-        var nutrients = {"cho" => cho, "na" => na} as Dictionary<String, Number>;
-        return new NutritionItem(id, name, scheduledTime, nutrients, iconKey);
+        var rawProductKey = firstNonEmptyString([
+            extractStringValue(itemJson, "productId"),
+            extractStringValue(itemJson, "productSlug"),
+            extractStringValue(itemJson, "productCode"),
+            extractStringValue(itemJson, "slug"),
+            extractStringValue(itemJson, "sku"),
+            extractStringValue(itemJson, "code")
+        ] as Array<String or Null>);
+
+        var normalizedIconKey = ProductCatalogMapper.normalizeIconKey(iconKey, rawProductKey, name);
+        var nutrients = ProductCatalogMapper.fillMissingNutrients(name, rawProductKey, normalizedIconKey, cho, na);
+        return new NutritionItem(id, name, scheduledTime, nutrients, normalizedIconKey);
     }
 
     static function extractStringValue(json as String, key as String) as String? {
@@ -411,6 +439,16 @@ class NutritionPlanParser {
     private static function isDigit(ch as String) as Boolean {
         return ch.equals("0") || ch.equals("1") || ch.equals("2") || ch.equals("3") || ch.equals("4") ||
                ch.equals("5") || ch.equals("6") || ch.equals("7") || ch.equals("8") || ch.equals("9");
+    }
+
+    private static function firstNonEmptyString(values as Array<String or Null>) as String or Null {
+        for (var i = 0; i < values.size(); i++) {
+            var value = values[i];
+            if (value != null && !(value as String).equals("")) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private static function startsWith(text as String, prefix as String) as Boolean {

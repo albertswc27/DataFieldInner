@@ -1,80 +1,99 @@
 {
-  "id": "demo-ironman703",
-  "name": "Ironman 70.3 Demo",
+  "id": "demo-quick-1min",
+  "name": "Demo Rapido 1min",
   "items": [
     {
-      "id": "1",
-      "name": "Gel + Agua",
+      "id": "d1",
+      "name": "Agua 150ml",
+      "iconKey": "agua_150",
+      "scheduledTime": 60,
+      "nutrients": { "cho": 0, "na": 0 }
+    },
+    {
+      "id": "d2",
+      "name": "Gel LITE 30 Limon",
+      "iconKey": "gel30_limon",
+      "scheduledTime": 120,
+      "nutrients": { "cho": 30, "na": 50 }
+    },
+    {
+      "id": "d3",
+      "name": "Iso Drink 250ml",
+      "iconKey": "iso_250",
+      "scheduledTime": 180,
+      "nutrients": { "cho": 15, "na": 180 }
+    },
+    {
+      "id": "d4",
+      "name": "Electrolytes",
+      "iconKey": "electrolytes",
+      "scheduledTime": 240,
+      "nutrients": { "cho": 0, "na": 250 }
+    },
+    {
+      "id": "d5",
+      "name": "Carbo Gummy",
+      "iconKey": "carbo_gummy",
+      "scheduledTime": 300,
+      "nutrients": { "cho": 24, "na": 30 }
+    },
+    {
+      "id": "d6",
+      "name": "Gel Hydro 45 Cafe",
+      "iconKey": "gelhydro45_cafe",
+      "scheduledTime": 360,
+      "nutrients": { "cho": 45, "na": 100 }
+    },
+    {
+      "id": "d7",
+      "name": "Agua 250ml",
+      "iconKey": "agua_250",
+      "scheduledTime": 420,
+      "nutrients": { "cho": 0, "na": 0 }
+    },
+    {
+      "id": "d8",
+      "name": "Buffer",
+      "iconKey": "buffer",
+      "scheduledTime": 480,
+      "nutrients": { "cho": 0, "na": 200 }
+    },
+    {
+      "id": "d9",
+      "name": "Electro Gummy",
+      "iconKey": "electro_gummy",
+      "scheduledTime": 540,
+      "nutrients": { "cho": 5, "na": 150 }
+    },
+    {
+      "id": "d10",
+      "name": "Gel 60 Naranja",
+      "iconKey": "gel60_naranja",
       "scheduledTime": 600,
-      "nutrients": {
-        "cho": 25,
-        "na": 50
-      }
+      "nutrients": { "cho": 60, "na": 120 }
     },
     {
-      "id": "2",
-      "name": "Isotónico 500ml",
-      "scheduledTime": 900,
-      "nutrients": {
-        "cho": 30,
-        "na": 200
-      }
+      "id": "d11",
+      "name": "Glut5 Drink 150",
+      "iconKey": "glut5_150",
+      "scheduledTime": 660,
+      "nutrients": { "cho": 20, "na": 160 }
     },
     {
-      "id": "3",
-      "name": "Barrita",
-      "scheduledTime": 1200,
-      "nutrients": {
-        "cho": 40,
-        "na": 80
-      }
+      "id": "d12",
+      "name": "Cafeina",
+      "iconKey": "cafeina",
+      "scheduledTime": 720,
+      "nutrients": { "cho": 0, "na": 0 }
     },
     {
-      "id": "4",
-      "name": "Agua 250ml",
-      "scheduledTime": 1500,
-      "nutrients": {
-        "cho": 0,
-        "na": 0
-      }
-    },
-    {
-      "id": "5",
-      "name": "Gel Cafeína",
-      "scheduledTime": 1800,
-      "nutrients": {
-        "cho": 25,
-        "na": 50
-      }
-    },
-    {
-      "id": "6",
-      "name": "Isotónico 500ml",
-      "scheduledTime": 2100,
-      "nutrients": {
-        "cho": 30,
-        "na": 200
-      }
-    },
-    {
-      "id": "7",
-      "name": "Gel",
-      "scheduledTime": 2400,
-      "nutrients": {
-        "cho": 25,
-        "na": 50
-      }
-    },
-    {
-      "id": "8",
-      "name": "Agua 250ml",
-      "scheduledTime": 2700,
-      "nutrients": {
-        "cho": 0,
-        "na": 0
-      }
+      "id": "d13",
+      "name": "Carbo Gummy Fresa",
+      "iconKey": "carbo_gummy_fresa",
+      "scheduledTime": 780,
+      "nutrients": { "cho": 24, "na": 30 }
     }
   ],
-  "targetCHO": 175,
-  "targetNa": 630
+  "targetCHO": 223,
+  "targetNa": 1270
 }

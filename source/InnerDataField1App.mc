@@ -5,7 +5,7 @@ import Toybox.System;
 
 class InnerDataField1App extends Application.AppBase {
     hidden var mSettingsVersion as Number = 0;
-    private const BOOTSTRAP_PAIRING_CODE = "UVE-KXH";
+    private const BOOTSTRAP_PAIRING_CODE = "";
 
     function initialize() {
         AppBase.initialize();
@@ -78,6 +78,7 @@ class InnerDataField1App extends Application.AppBase {
             || key.equals("showCountdown")
             || key.equals("showNutrients")
             || key.equals("useFreeMode")
+            || key.equals("useQuickDemoPlan")
             || key.equals("autoAdvance")
             || key.equals("autoConsumePlannedItems")) {
             if (!(value instanceof Boolean)) {

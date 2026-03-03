@@ -1,8 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <resources>
     <properties>
         <!-- Sync Configuration -->
-        <property id="pairingCode" type="string">UVE-KXH</property>
+        <property id="pairingCode" type="string"></property>
         <property id="apiUrl" type="string">https://us-central1-fanteinner-4fd38.cloudfunctions.net</property>
         
         <!-- Nutrition Plan JSON (synced from web app or manual) -->
@@ -26,6 +26,7 @@
 
         <!-- Free Mode -->
         <property id="useFreeMode" type="boolean">false</property>
+        <property id="useQuickDemoPlan" type="boolean">false</property>
         <property id="freeIntervalSec" type="number">900</property>
         <property id="freeCHO" type="number">25</property>
         <property id="freeNa" type="number">150</property>
@@ -97,6 +98,10 @@
             <settingConfig type="boolean" />
         </setting>
 
+        <setting propertyKey="@Properties.useQuickDemoPlan" title="@Strings.UseQuickDemoPlanTitle">
+            <settingConfig type="boolean" />
+        </setting>
+
         <setting propertyKey="@Properties.freeItemName" title="@Strings.FreeItemNameTitle">
             <settingConfig type="alphaNumeric" />
         </setting>
@@ -137,6 +142,7 @@
         <string id="ShowCountdownTitle">Show Countdown</string>
         <string id="ShowNutrientsTitle">Show Nutrients</string>
         <string id="UseFreeModeTitle">Use Free Mode</string>
+        <string id="UseQuickDemoPlanTitle">Quick Demo Plan (1-min alerts)</string>
         <string id="FreeItemNameTitle">Free Mode Item Name</string>
         <string id="FreeIntervalTitle">Free Mode Interval (sec)</string>
         <string id="FreeCHOTitle">Free Mode CHO per Item (g)</string>
@@ -161,3 +167,4 @@
         <string id="OkButton">OK</string>
     </strings>
 </resources>
+

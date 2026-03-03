@@ -21,7 +21,7 @@ class ProductIconResolver {
     }
 
     private static function resolveResourceId(item as NutritionItem) {
-        var iconKey = item.iconKey;
+        var iconKey = ProductCatalogMapper.normalizeIconKey(item.iconKey, null, item.name);
 
         if (iconKey != null) {
             var key = iconKey as Lang.String;

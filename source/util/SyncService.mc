@@ -230,7 +230,7 @@ class SyncService {
         return null;
     }
 
-    private function buildPlanFromDictionary(planDict as Dictionary) as NutritionPlan? {
+    private function buildPlanFromDictionary(planDict as Dictionary or Null) as NutritionPlan? {
         if (planDict == null) {
             return null;
         }
@@ -279,17 +279,57 @@ class SyncService {
 
         if (itemDict.hasKey("nutrients") && itemDict["nutrients"] instanceof Dictionary) {
             var nutrients = itemDict["nutrients"] as Dictionary;
-            if (nutrients.hasKey("cho") && nutrients["cho"] instanceof Number) {
-                cho = nutrients["cho"] as Number;
+            cho = getNumberFromKeys(nutrients, ["cho", "carbs", "carbohydrates", "choGrams", "carbsG"]);
+            na = getNumberFromKeys(nutrients, ["na", "sodium", "sodiumMg", "naMg", "sodiumMilligrams"]);
+        }
+
+        // Alternative top-level nutrient encodings from web payloads.
+        if (cho <= 0) {
+            cho = getNumberFromKeys(itemDict, ["cho", "carbs", "carbohydrates", "choGrams", "carbsG"]);
+        }
+        if (na <= 0) {
+            na = getNumberFromKeys(itemDict, ["na", "sodium", "sodiumMg", "naMg", "sodiumMilligrams"]);
+        }
+
+        // Nested macro blocks occasionally used by web APIs.
+        if (itemDict.hasKey("macros") && itemDict["macros"] instanceof Dictionary) {
+            var macros = itemDict["macros"] as Dictionary;
+            if (cho <= 0) {
+                cho = getNumberFromKeys(macros, ["cho", "carbs", "carbohydrates"]);
             }
-            if (nutrients.hasKey("na") && nutrients["na"] instanceof Number) {
-                na = nutrients["na"] as Number;
+            if (na <= 0) {
+                na = getNumberFromKeys(macros, ["na", "sodium", "sodiumMg"]);
             }
         }
 
-        var iconKey = getDictionaryString(itemDict, "iconKey", "");
-        var nutrientsMap = {"cho" => cho, "na" => na} as Dictionary<String, Number>;
-        return new NutritionItem(itemId, itemName, scheduledTime, nutrientsMap, iconKey);
+        var rawIconKey = getDictionaryString(itemDict, "iconKey", "");
+        var rawProductKey = getFirstStringFromKeys(itemDict, [
+            "productId", "productSlug", "productCode", "slug", "sku", "code"
+        ]);
+        if ((rawProductKey == null || rawProductKey.equals("")) && itemDict.hasKey("product") && itemDict["product"] instanceof Dictionary) {
+            var productDict = itemDict["product"] as Dictionary;
+            rawProductKey = getFirstStringFromKeys(productDict, ["id", "slug", "code", "sku", "productId"]);
+        }
+
+        var normalizedIconKey = ProductCatalogMapper.normalizeIconKey(
+            rawIconKey.equals("") ? null : rawIconKey,
+            rawProductKey,
+            itemName
+        );
+
+        var enrichedNutrients = ProductCatalogMapper.fillMissingNutrients(
+            itemName,
+            rawProductKey,
+            normalizedIconKey,
+            cho,
+            na
+        );
+
+        if ((enrichedNutrients["cho"] as Number) != cho || (enrichedNutrients["na"] as Number) != na) {
+            System.println("Enriched nutrients for " + itemName + ": CHO " + enrichedNutrients["cho"] + " / Na " + enrichedNutrients["na"]);
+        }
+
+        return new NutritionItem(itemId, itemName, scheduledTime, enrichedNutrients, normalizedIconKey);
     }
 
     private function extractPlansPayload(data as Dictionary or String or Null) as Dictionary? {
@@ -304,8 +344,6 @@ class SyncService {
         if (data instanceof String) {
             return extractPlansPayloadFromString(data as String);
         }
-
-        return null;
     }
 
     private function extractPlansPayloadFromDictionary(responseDict as Dictionary) as Dictionary? {
@@ -468,7 +506,47 @@ class SyncService {
         return text.equals("") ? fallback : text;
     }
 
-    private function buildPairingCodeCandidates(rawCode as String) as Array<String> {
+    private function getFirstStringFromKeys(dict as Dictionary, keys as Array<String>) as String? {
+        for (var i = 0; i < keys.size(); i++) {
+            var key = keys[i];
+            if (!dict.hasKey(key)) {
+                continue;
+            }
+            var value = dict[key];
+            if (value == null) {
+                continue;
+            }
+            var text = value.toString();
+            if (!text.equals("")) {
+                return text;
+            }
+        }
+        return null;
+    }
+
+    private function getNumberFromKeys(dict as Dictionary, keys as Array<String>) as Number {
+        for (var i = 0; i < keys.size(); i++) {
+            var key = keys[i];
+            if (!dict.hasKey(key)) {
+                continue;
+            }
+            var value = dict[key];
+            if (value == null) {
+                continue;
+            }
+            if (value instanceof Number) {
+                return value as Number;
+            }
+            try {
+                return value.toString().toNumber();
+            } catch (ex) {
+                // Continue trying alternate keys.
+            }
+        }
+        return 0;
+    }
+
+    private function buildPairingCodeCandidates(rawCode as String or Null) as Array<String> {
         var candidates = [] as Array<String>;
         if (rawCode == null) {
             return candidates;

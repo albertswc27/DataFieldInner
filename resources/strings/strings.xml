@@ -12,6 +12,7 @@
     <string id="ShowCountdownTitle">Mostrar Cuenta Atras</string>
     <string id="ShowNutrientsTitle">Mostrar Nutrientes</string>
     <string id="UseFreeModeTitle">Usar Modo Libre</string>
+    <string id="UseQuickDemoPlanTitle">Usar Demo Rapida 1min</string>
     <string id="FreeItemNameTitle">Nombre Item Modo Libre</string>
     <string id="FreeIntervalTitle">Intervalo Modo Libre (s)</string>
     <string id="FreeCHOTitle">CHO por Item Modo Libre (g)</string>
