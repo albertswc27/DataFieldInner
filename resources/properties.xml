@@ -76,10 +76,6 @@
             <settingConfig type="numeric" min="0" max="300" />
         </setting>
         
-        <setting propertyKey="@Properties.autoAdvance" title="@Strings.AutoAdvanceTitle">
-            <settingConfig type="boolean" />
-        </setting>
-
         <setting propertyKey="@Properties.autoConsumePlannedItems" title="@Strings.AutoConsumePlannedItemsTitle">
             <settingConfig type="boolean" />
         </setting>

@@ -1,3 +1,4 @@
+import Toybox.Graphics;
 import Toybox.Lang;
 
 /*
@@ -36,6 +37,29 @@ class ProductClassifier {
         }
 
         return "NUTRICION";
+    }
+
+    /*
+     * Canonical category color mapping. Single source of truth used by
+     * NutritionDataFieldAlert, InnerDataField1View, and any future consumers.
+     */
+    static function getCategoryColor(label as String) as Graphics.ColorType {
+        if (label.equals("BEBIDA") || label.equals("AGUA")) {
+            return 0x66CCFF;
+        }
+        if (label.equals("GEL")) {
+            return 0xFFD166;
+        }
+        if (label.equals("GOMINOLA")) {
+            return 0xFF99CC;
+        }
+        if (label.equals("ELECTROLITOS")) {
+            return 0x99FF99;
+        }
+        if (label.equals("CAFEINA")) {
+            return 0xFFE08A;
+        }
+        return Graphics.COLOR_WHITE;
     }
 
     static function shouldUseDrinkPattern(item as NutritionItem) as Boolean {

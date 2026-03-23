@@ -15,3 +15,24 @@ external-mir/
 .DS_Store
 Thumbs.db
 .vscode/
+.claude/
+
+# Keys (never commit)
+developer_key.der
+developer_key.pem
+
+# Release builds
+release/*.iq
+release/*.prg
+release/*.prg.debug.xml
+release/*.json
+release/*.txt
+release/gen/
+release/internal-mir/
+release/external-mir/
+
+# Analysis docs (local only)
+ANALISIS_PROFUNDO_INNERDATAFIELD1.md
+COMPARATIVA_INNERDATAFIELD1_VS_INNERFUELPLAN.md
+QUICK_REFERENCE_FIXES.md
+docs/

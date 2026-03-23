@@ -59,63 +59,98 @@ class NutritionDataFieldAlert extends WatchUi.DataFieldAlert {
     function onUpdate(dc as Dc) as Void {
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         dc.clear();
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
 
         var width = dc.getWidth();
         var height = dc.getHeight();
         var centerX = width / 2;
+        var catColor = ProductClassifier.getCategoryColor(mCategoryLabel);
 
-        var itemName = mItemName;
-        if (itemName.length() > 18) {
-            itemName = itemName.substring(0, 16) + "..";
-        }
+        // ── Accent strip at very top ─────────────────────────────────────────
+        var stripH = (height * 0.07).toNumber();
+        if (stripH < 10) { stripH = 10; }
+        dc.setColor(catColor, catColor);
+        dc.fillRectangle(0, 0, width, stripH);
 
-        dc.drawText(centerX, height * 0.12, Graphics.FONT_XTINY, "INNER NUTRICION", Graphics.TEXT_JUSTIFY_CENTER);
-        if (mBatchMode && mBatchCount > 1) {
-            dc.drawText(centerX, height * 0.20, Graphics.FONT_XTINY, "TOMA MULTIPLE x" + mBatchCount, Graphics.TEXT_JUSTIFY_CENTER);
-            dc.drawText(centerX, height * 0.28, Graphics.FONT_SMALL, itemName, Graphics.TEXT_JUSTIFY_CENTER);
-        } else {
-            dc.drawText(centerX, height * 0.24, Graphics.FONT_SMALL, itemName, Graphics.TEXT_JUSTIFY_CENTER);
-        }
+        // Batch / category label on the strip
+        dc.setColor(0x1A1A2E, Graphics.COLOR_TRANSPARENT);
+        var headerLabel = mBatchMode && mBatchCount > 1
+            ? "TOMA x" + mBatchCount + "  " + mCategoryLabel
+            : mCategoryLabel;
+        dc.drawText(
+            centerX,
+            stripH / 2,
+            Graphics.FONT_XTINY,
+            headerLabel,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+        );
 
+        // ── Product icon (centred, large) ─────────────────────────────────────
         drawProductIcon(dc, centerX, height);
 
-        dc.setColor(getCategoryColor(), Graphics.COLOR_TRANSPARENT);
-        if (mBatchMode && mBatchCount > 1) {
-            dc.drawText(centerX, height * 0.64, Graphics.FONT_XTINY, "PRINCIPAL: " + mCategoryLabel, Graphics.TEXT_JUSTIFY_CENTER);
-        } else {
-            dc.drawText(centerX, height * 0.64, Graphics.FONT_XTINY, "TIPO: " + mCategoryLabel, Graphics.TEXT_JUSTIFY_CENTER);
+        // ── Item name ─────────────────────────────────────────────────────────
+        var itemName = truncateText(mItemName, 20);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(
+            centerX,
+            height * 0.54,
+            Graphics.FONT_SMALL,
+            itemName,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+        );
+
+        // ── Nutrient delta ─────────────────────────────────────────────────────
+        var cho = mBatchMode ? mBatchTotalCHO : mCHO;
+        var na  = mBatchMode ? mBatchTotalNa  : mNa;
+        var nutriLine = "";
+        if (cho > 0) { nutriLine = "+" + cho + "g CHO"; }
+        if (na > 0) {
+            if (!nutriLine.equals("")) { nutriLine += "  "; }
+            nutriLine += "+" + na + "mg Na";
+        }
+        if (!nutriLine.equals("")) {
+            dc.setColor(catColor, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(
+                centerX,
+                height * 0.65,
+                Graphics.FONT_XTINY,
+                nutriLine,
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+            );
         }
 
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        if (mBatchMode && mBatchCount > 1) {
-            dc.drawText(centerX, height * 0.72, Graphics.FONT_XTINY, "Lote CHO " + mBatchTotalCHO + "g  Na " + mBatchTotalNa + "mg", Graphics.TEXT_JUSTIFY_CENTER);
-            if (!mBatchNames.equals("")) {
-                dc.drawText(centerX, height * 0.78, Graphics.FONT_XTINY, truncateText(mBatchNames, 22), Graphics.TEXT_JUSTIFY_CENTER);
-            }
+        // ── Bottom confirmation strip ─────────────────────────────────────────
+        var botStripY = (height * 0.76).toNumber();
+        var botStripH = (height * 0.14).toNumber();
+        if (botStripH < 16) { botStripH = 16; }
+        if (mAutoConsumeEnabled) {
+            dc.setColor(0x22C55E, 0x22C55E);  // green
         } else {
-            dc.drawText(centerX, height * 0.72, Graphics.FONT_XTINY, "CHO " + mCHO + "g  Na " + mNa + "mg", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.setColor(0x475569, 0x475569);  // slate
         }
+        dc.fillRectangle(0, botStripY, width, botStripH);
+        dc.setColor(0xFFFFFF, Graphics.COLOR_TRANSPARENT);
+        var confirmLabel = mAutoConsumeEnabled ? "REGISTRADO" : "INFORMATIVO";
+        if (mBatchMode && mBatchCount > 1 && mAutoConsumeEnabled) {
+            confirmLabel = "LOTE REGISTRADO";
+        }
+        dc.drawText(
+            centerX,
+            botStripY + botStripH / 2,
+            Graphics.FONT_XTINY,
+            confirmLabel,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+        );
 
-        dc.setColor(0x66FF66, Graphics.COLOR_TRANSPARENT);
-        if (mAutoConsumeEnabled) {
-            if (mBatchMode && mBatchCount > 1) {
-                dc.drawText(centerX, height * 0.86, Graphics.FONT_XTINY, "Lote auto-registrado", Graphics.TEXT_JUSTIFY_CENTER);
-            } else {
-                dc.drawText(centerX, height * 0.84, Graphics.FONT_XTINY, "Auto-registrado", Graphics.TEXT_JUSTIFY_CENTER);
-            }
-        } else {
-            dc.drawText(centerX, height * 0.84, Graphics.FONT_XTINY, "Alerta informativa", Graphics.TEXT_JUSTIFY_CENTER);
-        }
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        if (mAutoConsumeEnabled) {
-            if (mBatchMode && mBatchCount > 1) {
-                dc.drawText(centerX, height * 0.93, Graphics.FONT_XTINY, "CHO/Na actualizados", Graphics.TEXT_JUSTIFY_CENTER);
-            } else {
-                dc.drawText(centerX, height * 0.91, Graphics.FONT_XTINY, "Suma actualizada", Graphics.TEXT_JUSTIFY_CENTER);
-            }
-        } else {
-            dc.drawText(centerX, height * 0.91, Graphics.FONT_XTINY, "Sin interaccion", Graphics.TEXT_JUSTIFY_CENTER);
+        // Batch item names (if any)
+        if (mBatchMode && !mBatchNames.equals("")) {
+            dc.setColor(0x94A3B8, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(
+                centerX,
+                botStripY + botStripH + (height * 0.02),
+                Graphics.FONT_XTINY,
+                truncateText(mBatchNames, 22),
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+            );
         }
     }
 
@@ -132,35 +167,16 @@ class NutritionDataFieldAlert extends WatchUi.DataFieldAlert {
         return text.substring(0, maxLen - 2) + "..";
     }
 
-    private function getCategoryColor() as Graphics.ColorType {
-        if (mCategoryLabel.equals("BEBIDA") || mCategoryLabel.equals("AGUA")) {
-            return 0x66CCFF;
-        }
-        if (mCategoryLabel.equals("GEL")) {
-            return 0xFFD166;
-        }
-        if (mCategoryLabel.equals("GOMINOLA")) {
-            return 0xFF99CC;
-        }
-        if (mCategoryLabel.equals("ELECTROLITOS")) {
-            return 0x99FF99;
-        }
-        if (mCategoryLabel.equals("CAFEINA")) {
-            return 0xFFE08A;
-        }
-        return Graphics.COLOR_WHITE;
-    }
-
     private function drawProductIcon(dc as Dc, centerX as Number, height as Number) as Void {
-        var boxSize = (height * 0.26).toNumber();
-        if (boxSize < 42) {
-            boxSize = 42;
+        var boxSize = (height * 0.34).toNumber();
+        if (boxSize < 48) {
+            boxSize = 48;
         }
-        if (boxSize > 76) {
-            boxSize = 76;
+        if (boxSize > 90) {
+            boxSize = 90;
         }
         var boxX = (centerX - (boxSize / 2)).toNumber();
-        var boxY = (height * 0.33).toNumber();
+        var boxY = (height * 0.10).toNumber();
 
         // Icon container improves visibility on dark alert background.
         dc.setColor(0x1E293B, 0x1E293B);
@@ -171,7 +187,7 @@ class NutritionDataFieldAlert extends WatchUi.DataFieldAlert {
         }
 
         if (mProductIcon == null) {
-            dc.setColor(getCategoryColor(), Graphics.COLOR_TRANSPARENT);
+            dc.setColor(ProductClassifier.getCategoryColor(mCategoryLabel), Graphics.COLOR_TRANSPARENT);
             dc.drawText(centerX, boxY + (boxSize / 2), Graphics.FONT_XTINY, mCategoryLabel, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
             return;
         }
@@ -192,7 +208,7 @@ class NutritionDataFieldAlert extends WatchUi.DataFieldAlert {
             dc.drawBitmap(x, y, mProductIcon);
         } catch (ex) {
             System.println("Alert icon draw failed: " + ex.getErrorMessage());
-            dc.setColor(getCategoryColor(), Graphics.COLOR_TRANSPARENT);
+            dc.setColor(ProductClassifier.getCategoryColor(mCategoryLabel), Graphics.COLOR_TRANSPARENT);
             dc.drawText(centerX, boxY + (boxSize / 2), Graphics.FONT_XTINY, mCategoryLabel, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
     }

@@ -12,7 +12,7 @@ import Toybox.WatchUi;
  */
 class InnerDataField1View extends WatchUi.DataField {
     // Manual build marker to validate which PRG is actually loaded in simulator.
-    private const BUILD_MARKER = "B260303-01";
+    private const BUILD_MARKER = "B260317-01";
 
     hidden var mEngine as NutritionSessionEngine;
 
@@ -37,6 +37,9 @@ class InnerDataField1View extends WatchUi.DataField {
     hidden var mSyncErrorMessage as String = "";
     hidden var mLastBackgroundSyncSec as Number = -9999;
     hidden var mBackgroundSyncIntervalSec as Number = 120;
+    // Periodic mid-activity refresh even when a real plan is loaded (every 30 min).
+    hidden var mLastMidActivitySyncSec as Number = -9999;
+    private const MID_ACTIVITY_SYNC_INTERVAL_SEC = 1800;
 
     // Alert retry/fallback state for due items.
     hidden var mLastAlertItemId as String = "";
@@ -62,8 +65,14 @@ class InnerDataField1View extends WatchUi.DataField {
     hidden var mPendingAutoConsumeQueuedAtSec as Number = -9999;
     hidden var mTimerRunning as Boolean = false;
     hidden var mSessionStarted as Boolean = false;
+    // Stagger same-minute siblings: space alerts ~30s apart so each product
+    // gets its own vibration and overlay instead of one combined batch.
+    hidden var mSameMinuteStaggerSec as Number = 30;
+    hidden var mLastAlertMinuteBucket as Number = -1;
     // TEMP QA: visual timing trace for batch overlay duration validation.
     hidden var mDebugOverlayTiming as Boolean = false;
+    // Ambient temperature cached from Activity.Info (null if device has no sensor).
+    hidden var mAmbientTemp as Float or Null = null;
 
     function initialize() {
         DataField.initialize();
@@ -95,6 +104,10 @@ class InnerDataField1View extends WatchUi.DataField {
             if (mTimerRunning) {
                 mEngine.updateElapsedSeconds(elapsedSeconds);
             }
+        }
+        // Cache ambient temperature only if the device provides it.
+        if (info != null && info has :ambientTemperature && info.ambientTemperature != null) {
+            mAmbientTemp = info.ambientTemperature as Float;
         }
         maybeRefreshFromSettings();
 
@@ -217,7 +230,8 @@ class InnerDataField1View extends WatchUi.DataField {
             mSyncAttempted = true;
             mSyncSuccess = false;
             mSyncErrorMessage = "No pairing code";
-            fallbackToFreeModeIfNoPlan("No pairing code");
+            // Do NOT fallback to free mode — show "Sin Plan" screen so the user
+            // knows they need to configure the pairing code.
             return;
         }
 
@@ -266,17 +280,36 @@ class InnerDataField1View extends WatchUi.DataField {
         mLastSettingsVersion = currentVersion;
         System.println("Settings refresh (v=" + currentVersion + ")");
 
-        mSyncAttempted = false;
-        mSyncSuccess = false;
-        mSyncErrorMessage = "";
+        // Snapshot plan-affecting fields before reload to detect meaningful changes.
+        var prevFreeMode = mUseFreeMode;
+        var prevQuickDemo = mUseQuickDemoPlan;
+        var prevSelectedPlanId = mSelectedPlanId;
 
         loadSettings();
-        loadPlanFromProperties();
-        resetAlertTracking();
+
+        // Only reset session state and alert tracking when the plan itself changes.
+        // Display-only setting changes (vibration, sound, countdown, nutrients) must
+        // not disrupt an in-progress overlay or consume sequence.
+        var planAffectingChange = (prevFreeMode != mUseFreeMode)
+            || (prevQuickDemo != mUseQuickDemoPlan)
+            || !prevSelectedPlanId.equals(mSelectedPlanId);
+
+        if (planAffectingChange) {
+            mSyncAttempted = false;
+            mSyncSuccess = false;
+            mSyncErrorMessage = "";
+            loadPlanFromProperties();
+            resetAlertTracking();
+        }
 
         if (!mUseFreeMode && !mUseQuickDemoPlan) {
+            if (planAffectingChange) {
+                mSyncAttempted = false;
+                mSyncSuccess = false;
+            }
+            // Always attempt sync on any settings change — may be a pairing code update.
             attemptSync(true);
-        } else {
+        } else if (planAffectingChange) {
             mSyncAttempted = true;
             mSyncSuccess = true;
         }
@@ -297,6 +330,11 @@ class InnerDataField1View extends WatchUi.DataField {
 
     private function loadPlanFromProperties() as Void {
         var plan = null;
+
+        // No pairing code and not in special mode → stay on "Sin Plan" screen.
+        if (!mUseFreeMode && !mUseQuickDemoPlan && !hasPairingCodeConfigured()) {
+            return;
+        }
 
         try {
             if (mUseQuickDemoPlan) {
@@ -330,9 +368,9 @@ class InnerDataField1View extends WatchUi.DataField {
                     var planJson = Application.Properties.getValue("nutritionPlan");
                     if (planJson != null && planJson instanceof String && !planJson.equals("")) {
                         var planStr = planJson as String;
-                        if (planStr.length() > 10 && planStr.length() <= 4000) {
+                        if (planStr.length() > 10 && planStr.length() <= 10000) {
                             plan = NutritionPlanParser.parse(planStr);
-                        } else if (planStr.length() > 4000) {
+                        } else if (planStr.length() > 10000) {
                             System.println("Skip nutritionPlan parse (payload too large)");
                         }
                     }
@@ -343,10 +381,10 @@ class InnerDataField1View extends WatchUi.DataField {
                     var plansJson = Application.Properties.getValue("nutritionPlans");
                     if (plansJson != null && plansJson instanceof String && !plansJson.equals("")) {
                         var plansStr = plansJson as String;
-                        if (plansStr.length() > 10 && plansStr.length() <= 4000) {
+                        if (plansStr.length() > 10 && plansStr.length() <= 10000) {
                             var parsedPlans = NutritionPlanParser.parsePlans(plansStr);
                             plan = selectPlan(parsedPlans, mSelectedPlanId);
-                        } else if (plansStr.length() > 4000) {
+                        } else if (plansStr.length() > 10000) {
                             System.println("Skip nutritionPlans parse (payload too large)");
                         }
                     }
@@ -363,6 +401,11 @@ class InnerDataField1View extends WatchUi.DataField {
 
     private function loadPlanFromSyncCache() as Boolean {
         if (mUseFreeMode || mUseQuickDemoPlan) {
+            return false;
+        }
+
+        // Skip cache if no pairing code configured (shows "Sin Plan" screen).
+        if (!hasPairingCodeConfigured()) {
             return false;
         }
 
@@ -512,7 +555,8 @@ class InnerDataField1View extends WatchUi.DataField {
 
         mEngine.setToleranceSec(mToleranceSec);
         mEngine.setDueJitterGraceSec(10);
-        mEngine.setAlertCatchupGraceSec(45);
+        // 90s accommodates up to 3 same-minute items with 30s stagger between each.
+        mEngine.setAlertCatchupGraceSec(90);
         // DataField UX needs "alert -> visual overlay -> consume". If the engine
         // auto-consumes on timeline evaluation, it can race ahead before the view
         // shows the alert/overlay (especially in simulator timer jitter).
@@ -794,87 +838,67 @@ class InnerDataField1View extends WatchUi.DataField {
             return;
         }
 
-        var dueMinuteBatch = mEngine.getCurrentDueMinuteBatch(8);
-        var useBatchAlert = mAutoConsumePlannedItems && dueMinuteBatch != null && dueMinuteBatch.size() > 1;
+        // Stagger same-minute siblings: space alerts ~30s apart so the athlete
+        // sees each product individually with its own vibration.
+        if (mAutoConsumePlannedItems) {
+            var itemBucket = item.scheduledTime - (item.scheduledTime % 60);
+            if (itemBucket == mLastAlertMinuteBucket && (elapsedSeconds - mLastAlertAtSec) < mSameMinuteStaggerSec) {
+                return;
+            }
+        }
 
         System.println(
             "Due notify: " + item.name +
             " (id=" + item.id +
-            ", t=" + elapsedSeconds +
-            ", batch=" + (useBatchAlert ? dueMinuteBatch.size() : 1) + ")"
+            ", t=" + elapsedSeconds + ")"
         );
 
         mEngine.markAlertSentForCurrentItem();
         triggerAlert(item);
         var shown = false;
         if (mAutoConsumePlannedItems) {
-            // In auto-consume mode we already render a custom in-field overlay.
-            // Skipping native DataFieldAlert avoids stealing part of the first
-            // overlay slot in batch sequences (we want ~5s per product visible).
+            // In auto-consume mode we render a custom in-field overlay per product.
+            // Same-minute siblings are staggered ~30s apart so each gets its own alert.
             shown = true;
-            System.println("Using in-field overlay alert (native popup skipped in auto mode)");
+            System.println("Using in-field overlay alert (staggered per product)");
         } else {
-            if (useBatchAlert) {
-                shown = showDueBatchAlert(dueMinuteBatch);
-            } else {
-                shown = showDueItemAlert(item, null);
-            }
+            shown = showDueItemAlert(item, null);
             if (!shown) {
                 System.println("Native DataField alert unavailable; using AHORA fallback");
             }
         }
 
         if (mAutoConsumePlannedItems) {
-            if (useBatchAlert) {
-                var batchResult = autoConsumeCurrentDueMinuteBatch(dueMinuteBatch);
-                if (batchResult != null) {
-                    rememberAutoConsumeBatchNotice(item, batchResult);
-                    mRecentAutoConsumeCommitted = true;
-                    System.println(
-                        "Immediate batch auto-consume: " +
-                        (batchResult.hasKey("count") ? batchResult["count"] : 0) +
-                        " items"
-                    );
-                    logNutritionMetrics("Post batch auto-consume");
-                } else {
-                    // Fallback visual only; leave item as AHORA if engine could not consume.
-                    var previewSummary = buildBatchSummaryForItems(dueMinuteBatch);
-                    rememberAutoConsumeBatchNotice(item, previewSummary);
-                    mRecentAutoConsumeCommitted = false;
-                    System.println("Immediate batch auto-consume failed; preview only");
-                }
+            rememberAutoConsumeNotice(item);
+            var consumedSingle = mEngine.consumeCurrentDueItemById(item.id);
+            if (!consumedSingle) {
+                consumedSingle = mEngine.consumeCurrentScheduledItemById(item.id);
+            }
+            if (!consumedSingle) {
+                consumedSingle = mEngine.forceConsumeCurrentItemById(item.id);
+            }
+            if (consumedSingle) {
+                mRecentAutoConsumeCommitted = true;
+                System.println(
+                    "Immediate auto-consume: " + item.id +
+                    " +" + item.getNutrient("cho") + "g CHO, +" +
+                    item.getNutrient("na") + "mg Na"
+                );
+                logNutritionMetrics("Post auto-consume");
             } else {
-                rememberAutoConsumeNotice(item);
-                var consumedSingle = mEngine.consumeCurrentDueItemById(item.id);
-                if (!consumedSingle) {
-                    consumedSingle = mEngine.consumeCurrentScheduledItemById(item.id);
-                }
-                if (!consumedSingle) {
-                    consumedSingle = mEngine.forceConsumeCurrentItemById(item.id);
-                }
-                if (consumedSingle) {
-                    mRecentAutoConsumeCommitted = true;
-                    System.println(
-                        "Immediate auto-consume: " + item.id +
-                        " +" + item.getNutrient("cho") + "g CHO, +" +
-                        item.getNutrient("na") + "mg Na"
-                    );
-                    logNutritionMetrics("Post auto-consume");
-                } else {
-                    mRecentAutoConsumeCommitted = false;
-                    var currentAfterAlert = mEngine.getCurrentItem();
-                    var currentDesc = currentAfterAlert == null ? "<none>" : (currentAfterAlert.id + " state=" + currentAfterAlert.state);
-                    System.println("Immediate auto-consume failed for item: " + item.id + " current=" + currentDesc);
-                }
+                mRecentAutoConsumeCommitted = false;
+                var currentAfterAlert = mEngine.getCurrentItem();
+                var currentDesc = currentAfterAlert == null ? "<none>" : (currentAfterAlert.id + " state=" + currentAfterAlert.state);
+                System.println("Immediate auto-consume failed for item: " + item.id + " current=" + currentDesc);
             }
 
-            // Delayed queue path disabled in favor of immediate consume; clear any stale queue.
             mPendingAutoConsumeEntries = [] as Array<Dictionary>;
             mPendingAutoConsumeQueuedAtSec = -9999;
         }
 
         mLastAlertItemId = item.id;
         mLastAlertAtSec = elapsedSeconds;
+        mLastAlertMinuteBucket = item.scheduledTime - (item.scheduledTime % 60);
     }
 
     private function autoConsumeCurrentDueMinuteBatch(items as Array<NutritionItem> or Null) as Dictionary or Null {
@@ -985,18 +1009,27 @@ class InnerDataField1View extends WatchUi.DataField {
             return;
         }
 
-        if (!isUsingFallbackFreePlan()) {
-            return;
-        }
-
         var elapsedSeconds = mEngine.getElapsedSeconds();
-        if ((elapsedSeconds - mLastBackgroundSyncSec) < mBackgroundSyncIntervalSec) {
+
+        // Fallback retry: re-sync aggressively when stuck with no real plan.
+        if (isUsingFallbackFreePlan()) {
+            if ((elapsedSeconds - mLastBackgroundSyncSec) >= mBackgroundSyncIntervalSec) {
+                mLastBackgroundSyncSec = elapsedSeconds;
+                System.println("Background sync retry (fallback)...");
+                attemptSync(true);
+            }
             return;
         }
 
-        mLastBackgroundSyncSec = elapsedSeconds;
-        System.println("Background sync retry...");
-        attemptSync(true);
+        // Mid-activity refresh: re-sync every 30 min even with a real plan loaded.
+        // Picks up plan edits made on the Inner web app during an activity.
+        if (hasRealPlanLoaded()) {
+            if ((elapsedSeconds - mLastMidActivitySyncSec) >= MID_ACTIVITY_SYNC_INTERVAL_SEC) {
+                mLastMidActivitySyncSec = elapsedSeconds;
+                System.println("Mid-activity plan refresh (t=" + elapsedSeconds + "s)");
+                attemptSync(true);
+            }
+        }
     }
 
     private function isUsingFallbackFreePlan() as Boolean {
@@ -1054,62 +1087,78 @@ class InnerDataField1View extends WatchUi.DataField {
 
     private function drawNoPlan(dc as Graphics.Dc, width as Number, height as Number, textColor as Graphics.ColorType) as Void {
         var message = "Sin Plan";
-        var detail = "Configura INNER y vincula con codigo";
+        var detail = "Vincula tu cuenta en";
+        var detail2 = "innerfuelplan.com";
         if (mSyncInProgress) {
             message = "Sincronizando";
             detail = "Descargando plan desde INNER";
+            detail2 = "";
         } else if (mSyncAttempted && !mSyncSuccess) {
             message = "Sync pendiente";
             detail = buildSyncHintText();
+            detail2 = "";
         } else if (mUseQuickDemoPlan) {
             message = "Demo Rapido";
             detail = "Avisos cada 1 min (sin sync web)";
+            detail2 = "";
         } else if (mUseFreeMode) {
             message = "Modo Libre";
             detail = "Recordatorios periodicos activos";
+            detail2 = "";
         } else if (!hasPairingCodeConfigured()) {
-            detail = "Configura pairing code en Garmin";
+            detail = "Configura pairing code en";
+            detail2 = "Garmin Connect IQ";
         }
 
-        var cardX = (width * 0.06).toNumber();
-        var cardY = (height * 0.12).toNumber();
-        var cardW = (width * 0.88).toNumber();
-        var cardH = (height * 0.76).toNumber();
+        var centerX = width / 2;
 
-        dc.setColor(0xFFFFFF, 0xFFFFFF);
-        dc.fillRectangle(cardX, cardY, cardW, cardH);
-        dc.setColor(0xD7DEE6, Graphics.COLOR_TRANSPARENT);
-        if (dc has :drawRectangle) {
-            dc.drawRectangle(cardX, cardY, cardW, cardH);
+        // ── INNER logo (centred, upper area) ────────────────────────────────
+        var logo = WatchUi.loadResource(Rez.Drawables.InnerLogo);
+        if (logo != null) {
+            var logoW = logo.getWidth();
+            var logoH = logo.getHeight();
+            var logoTargetW = (width * 0.50).toNumber();
+            var logoScale = logoTargetW.toFloat() / logoW.toFloat();
+            var logoTargetH = (logoH * logoScale).toNumber();
+            var logoY = (height * 0.18).toNumber();
+            if (dc has :drawScaledBitmap) {
+                var logoX = (centerX - logoTargetW / 2).toNumber();
+                dc.drawScaledBitmap(logoX, logoY, logoTargetW, logoTargetH, logo);
+            } else {
+                var logoX = (centerX - logoW / 2).toNumber();
+                dc.drawBitmap(logoX, logoY, logo);
+            }
         }
 
-        dc.setColor(0x2D3748, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(
-            width / 2,
-            height * 0.28,
-            Graphics.FONT_XTINY,
-            "INNER NUTRICION",
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
-
+        // ── Status message ──────────────────────────────────────────────────
         dc.setColor(textColor, Graphics.COLOR_TRANSPARENT);
-
         dc.drawText(
-            width / 2,
-            height * 0.50,
+            centerX,
+            height * 0.52,
             Graphics.FONT_MEDIUM,
             message,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        dc.setColor(0x4A5568, Graphics.COLOR_TRANSPARENT);
+        // ── Detail line(s) ──────────────────────────────────────────────────
+        dc.setColor(0x6B7280, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
-            width / 2,
-            height * 0.66,
+            centerX,
+            height * 0.65,
             Graphics.FONT_XTINY,
-            truncateText(detail, 28),
+            truncateText(detail, 30),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
+        if (!detail2.equals("")) {
+            dc.setColor(0x3B82F6, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(
+                centerX,
+                height * 0.73,
+                Graphics.FONT_XTINY,
+                detail2,
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+            );
+        }
     }
 
     private function drawCompleted(dc as Graphics.Dc, width as Number, height as Number, textColor as Graphics.ColorType) as Void {
@@ -1118,7 +1167,8 @@ class InnerDataField1View extends WatchUi.DataField {
         var cardW = (width * 0.90).toNumber();
         var cardH = (height * 0.84).toNumber();
 
-        dc.setColor(0xFFFFFF, 0xFFFFFF);
+        var completedBg = getBackgroundColor();
+        dc.setColor(completedBg, completedBg);
         dc.fillRectangle(cardX, cardY, cardW, cardH);
         dc.setColor(0xCFEAD7, Graphics.COLOR_TRANSPARENT);
         if (dc has :drawRectangle) {
@@ -1168,7 +1218,7 @@ class InnerDataField1View extends WatchUi.DataField {
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        dc.setColor(0x4A5568, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
             height * 0.86,
@@ -1188,76 +1238,100 @@ class InnerDataField1View extends WatchUi.DataField {
         dc.setColor(textColor, Graphics.COLOR_TRANSPARENT);
         drawContentCard(dc, width, height);
 
-        var headerName = mUseFreeMode ? "MODO LIBRE" : plan.name;
-        if (mUseQuickDemoPlan) {
-            headerName = BUILD_MARKER;
-        }
-        headerName = truncateText(headerName, 16);
-
-        var progress = mEngine.getCurrentIndexOneBased() + "/" + plan.getItemCount();
-        var headerText = headerName + " [" + progress + "]";
+        // ── Progress & header ────────────────────────────────────────────────
         var resolvedCount = mEngine.getConsumedCount() + mEngine.getSkippedCount() + mEngine.getMissedCount();
-        var progressRatio = 0.0;
-        if (plan.getItemCount() > 0) {
-            progressRatio = resolvedCount.toFloat() / plan.getItemCount().toFloat();
-        }
-        if (progressRatio < 0.0) {
-            progressRatio = 0.0;
-        }
-        if (progressRatio > 1.0) {
-            progressRatio = 1.0;
-        }
+        var progressRatio = plan.getItemCount() > 0
+            ? (resolvedCount.toFloat() / plan.getItemCount().toFloat())
+            : 0.0;
+        if (progressRatio < 0.0) { progressRatio = 0.0; }
+        if (progressRatio > 1.0) { progressRatio = 1.0; }
 
         var itemAccent = getPrimaryAccentColor(item);
+        drawProgressBar(dc, width, height, progressRatio, itemAccent);
 
-        dc.setColor(0x4A5568, Graphics.COLOR_TRANSPARENT);
+        // Plan name + item counter on one compact line.
+        var headerName = mUseFreeMode ? "MODO LIBRE" : plan.name;
+        if (mUseQuickDemoPlan) { headerName = BUILD_MARKER; }
+        headerName = truncateText(headerName, 14);
+        var headerText = headerName + "  " + mEngine.getCurrentIndexOneBased() + "/" + plan.getItemCount();
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
-            height * 0.22,
-            Graphics.FONT_XTINY,
+            height * 0.09,
+            pickFont(height, "label"),
             headerText,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        drawProgressBar(dc, width, height, progressRatio, itemAccent);
+        // Status chip (sync / mode badge) below header.
         drawStatusChip(dc, width, height, buildTopStatusText(), itemAccent);
 
-        var itemName = item.name;
-        itemName = truncateText(itemName, 18);
-        dc.setColor(0x4A5568, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(
-            width / 2,
-            height * 0.29,
-            Graphics.FONT_XTINY,
-            "SIGUIENTE ITEM",
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
+        // ── Due state takes over the lower zones ─────────────────────────────
+        var countdownText = buildCountdownText(item);
+        if (countdownText.equals("AHORA")) {
+            drawDueNow(dc, width, height, item, textColor, itemAccent);
+            return;
+        }
 
+        // ── Item icon + name ─────────────────────────────────────────────────
+        drawItemIconSmall(dc, width, height, item);
+
+        var itemName = truncateText(item.name, 18);
+        var itemFont = height > 200 ? Graphics.FONT_MEDIUM : Graphics.FONT_SMALL;
         dc.setColor(textColor, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
-            height * 0.35,
-            Graphics.FONT_SMALL,
+            height * 0.40,
+            itemFont,
             itemName,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        var countdownText = buildCountdownText(item);
+        // ── Metrics ──────────────────────────────────────────────────────────
         if (mShowNutrients) {
             drawPrimaryNutritionRateBlock(dc, width, height, item, textColor);
-        } else if (countdownText.equals("AHORA")) {
-            drawDueNow(dc, width, height, item, textColor);
-        } else {
-            dc.drawText(
-                width / 2,
-                height * 0.61,
-                Graphics.FONT_NUMBER_MILD,
-                countdownText,
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-            );
         }
 
+        // ── Countdown arc ────────────────────────────────────────────────────
         drawBottomCountdown(dc, width, height, countdownText, item, textColor, itemAccent);
+
+        // ── Temperature indicator (only when device provides sensor data) ─────
+        if (mAmbientTemp != null) {
+            drawTemperatureIndicator(dc, width, height, mAmbientTemp as Float);
+        }
+    }
+
+    /*
+     * Small item icon centered between the header and item name.
+     * Skipped on very small fields (<= 130px) where the icon would not be legible.
+     */
+    private function drawItemIconSmall(dc as Graphics.Dc, width as Number, height as Number, item as NutritionItem) as Void {
+        if (height < 140) {
+            return;
+        }
+
+        var icon = getCachedDueIcon(item);
+        if (icon == null) {
+            return;
+        }
+
+        var targetSize = (height * 0.14).toNumber();
+        if (targetSize < 28) { targetSize = 28; }
+        if (targetSize > 42) { targetSize = 42; }
+
+        var x = ((width / 2) - (targetSize / 2)).toNumber();
+        var y = (height * 0.22).toNumber();
+
+        try {
+            if (dc has :drawScaledBitmap) {
+                dc.drawScaledBitmap(x, y, targetSize, targetSize, icon);
+            } else {
+                var ox = ((width / 2) - (icon.getWidth() / 2)).toNumber();
+                dc.drawBitmap(ox, y, icon);
+            }
+        } catch (ex) {
+            // Icon draw failures are non-fatal; fall through silently.
+        }
     }
 
     private function drawPrimaryNutritionRateBlock(
@@ -1273,55 +1347,27 @@ class InnerDataField1View extends WatchUi.DataField {
         var consumedCHO = mEngine.getConsumedCHO();
         var consumedNa = mEngine.getConsumedNa();
 
-        dc.setColor(0x4A5568, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(
-            width / 2,
-            height * 0.46,
-            Graphics.FONT_XTINY,
-            "RITMO ACTUAL",
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
+        var row1Y = (height * 0.52).toNumber();
+        var row2Y = (height * 0.60).toNumber();
+        var centerX = width / 2;
 
-        dc.setColor(0xEEF2F7, 0xEEF2F7);
-        dc.fillRectangle((width * 0.10).toNumber(), (height * 0.49).toNumber(), (width * 0.80).toNumber(), (height * 0.21).toNumber());
-        dc.setColor(0xD7DEE6, Graphics.COLOR_TRANSPARENT);
-        if (dc has :drawRectangle) {
-            dc.drawRectangle((width * 0.10).toNumber(), (height * 0.49).toNumber(), (width * 0.80).toNumber(), (height * 0.21).toNumber());
-        }
+        // Compact centered rows: "CHO 118g/h · 59g" and "Na 730mg/h · 365mg"
+        var mFont = Graphics.FONT_XTINY;
+        var choLine = choRate.format("%.0f") + "g/h  " + consumedCHO + "g";
+        var naLine = naRate.format("%.0f") + "mg/h  " + consumedNa + "mg";
 
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(
-            width / 2,
-            height * 0.55,
-            Graphics.FONT_SMALL,
-            "CHO/h " + choRate.format("%.0f") + " g",
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
+        // Rate labels
+        dc.setColor(0x6B7280, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(centerX, row1Y, mFont,
+            "CHO " + choLine,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.setColor(0x6B7280, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(centerX, row2Y, mFont,
+            "Na " + naLine,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(
-            width / 2,
-            height * 0.66,
-            Graphics.FONT_SMALL,
-            "Na/h " + naRate.format("%.0f") + " mg",
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
-
-        var totalsLine = "Acum " + consumedCHO + "g CHO  " + consumedNa + "mg Na";
-        if (item.state == "due" && !(mAutoConsumePlannedItems && hasPendingAutoConsumeQueue())) {
-            totalsLine = "TOCA TOMA: " + ProductClassifier.getCategoryLabel(item);
-            dc.setColor(getCategoryColorForItem(item), Graphics.COLOR_TRANSPARENT);
-        } else {
-            dc.setColor(textColor, Graphics.COLOR_TRANSPARENT);
-        }
-        dc.drawText(
-            width / 2,
-            height * 0.74,
-            Graphics.FONT_XTINY,
-            truncateText(totalsLine, 26),
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
     }
+
 
     private function drawBottomCountdown(
         dc as Graphics.Dc,
@@ -1334,48 +1380,78 @@ class InnerDataField1View extends WatchUi.DataField {
     ) as Void {
         var footerLabel = "PROXIMA TOMA";
         if (mAutoConsumePlannedItems && hasPendingAutoConsumeQueue()) {
-            footerLabel = "PROCESANDO TOMA";
-        } else if (countdownText.equals("AHORA")) {
-            footerLabel = "TOMA AHORA";
+            footerLabel = "PROCESANDO...";
         } else if (!mShowCountdown) {
             footerLabel = "CUENTA ATRAS OFF";
         }
 
-        dc.setColor(0x4A5568, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
-            height * 0.80,
-            Graphics.FONT_XTINY,
+            height * 0.73,
+            pickFont(height, "label"),
             footerLabel,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        if (countdownText.equals("AHORA") && !(mAutoConsumePlannedItems && hasPendingAutoConsumeQueue())) {
-            dc.setColor(accentColor, Graphics.COLOR_TRANSPARENT);
-        } else {
-            dc.setColor(textColor, Graphics.COLOR_TRANSPARENT);
-        }
+        // ── Circular countdown arc ────────────────────────────────────────────
+        var arcR = (height * 0.105).toNumber();
+        if (arcR < 22) { arcR = 22; }
+        if (arcR > 40) { arcR = 40; }
+        var arcThick = (arcR * 0.28).toNumber();
+        if (arcThick < 5) { arcThick = 5; }
+        if (arcThick > 11) { arcThick = 11; }
+        var arcCX = (width / 2).toNumber();
+        var arcCY = (height * 0.88).toNumber();
 
-        dc.setColor(0xFFFFFF, 0xFFFFFF);
-        dc.fillRectangle((width * 0.18).toNumber(), (height * 0.84).toNumber(), (width * 0.64).toNumber(), (height * 0.10).toNumber());
+        // Ratio: 1.0 = full interval remaining, 0.0 = due now
+        var timeRemaining = item.scheduledTime - mEngine.getElapsedSeconds();
+        var intervalSec = getCurrentItemIntervalSec(item);
+        var ratio = 0.0f;
+        if (intervalSec > 0 && timeRemaining > 0) {
+            ratio = timeRemaining.toFloat() / intervalSec.toFloat();
+        }
+        if (ratio > 1.0f) { ratio = 1.0f; }
+        if (ratio < 0.0f) { ratio = 0.0f; }
+
+        // Background track (gray ring, drawn as 359° to avoid start==end ambiguity)
         dc.setColor(0xD7DEE6, Graphics.COLOR_TRANSPARENT);
-        if (dc has :drawRectangle) {
-            dc.drawRectangle((width * 0.18).toNumber(), (height * 0.84).toNumber(), (width * 0.64).toNumber(), (height * 0.10).toNumber());
+        for (var t = 0; t < arcThick; t++) {
+            dc.drawArc(arcCX, arcCY, arcR - t, Graphics.ARC_CLOCKWISE, 91, 90);
         }
 
-        if (countdownText.equals("AHORA") && !(mAutoConsumePlannedItems && hasPendingAutoConsumeQueue())) {
+        // Active arc: depletes clockwise from top as time passes
+        if (ratio > 0.005f) {
+            var sweepDeg = (360.0f * ratio).toNumber();
             dc.setColor(accentColor, Graphics.COLOR_TRANSPARENT);
-        } else {
-            dc.setColor(textColor, Graphics.COLOR_TRANSPARENT);
+            for (var t = 0; t < arcThick; t++) {
+                dc.drawArc(arcCX, arcCY, arcR - t, Graphics.ARC_CLOCKWISE, 90, 90 - sweepDeg);
+            }
         }
 
+        // Countdown number centered inside arc
+        dc.setColor(textColor, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
-            width / 2,
-            height * 0.89,
-            Graphics.FONT_SMALL,
+            arcCX,
+            arcCY,
+            pickFont(height, "countdown"),
             countdownText,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
+    }
+
+    private function getCurrentItemIntervalSec(item as NutritionItem) as Number {
+        var idx = mEngine.getCurrentIndexOneBased(); // 1-based
+        if (idx <= 1) {
+            // First item: interval from activity start to its scheduled time.
+            return item.scheduledTime > 0 ? item.scheduledTime : 900;
+        }
+        var plan = mEngine.getPlan();
+        if (plan == null) { return 900; }
+        var prevItem = plan.getItemAt(idx - 2); // 0-based index of previous item
+        if (prevItem == null) { return 900; }
+        var interval = item.scheduledTime - prevItem.scheduledTime;
+        return interval > 60 ? interval : 900;
     }
 
     private function buildCountdownText(item as NutritionItem) as String {
@@ -1411,52 +1487,102 @@ class InnerDataField1View extends WatchUi.DataField {
         width as Number,
         height as Number,
         item as NutritionItem,
-        textColor as Graphics.ColorType
+        textColor as Graphics.ColorType,
+        accentColor as Graphics.ColorType
     ) as Void {
+        // ── Large product icon (centred between status chip and item name) ───
         var icon = getCachedDueIcon(item);
-        if (icon != null) {
-            var targetSize = (height * 0.18).toNumber();
-            if (targetSize < 40) {
-                targetSize = 40;
-            }
-            if (targetSize > 56) {
-                targetSize = 56;
-            }
-            var y = (height * 0.38).toNumber();
-            var x = (width / 2) - (targetSize / 2);
+        // Zone starts below the status chip area, ends above item name.
+        var zoneTop = (height * 0.18).toNumber();
+        var zoneBot = (height * 0.46).toNumber();
+        var zoneH = zoneBot - zoneTop;
+        var targetSize = (zoneH * 0.85).toNumber();
+        if (targetSize < 64) { targetSize = 64; }
+        var iconY = (zoneTop + (zoneH - targetSize) / 2).toNumber();
+        if (iconY < zoneTop) { iconY = zoneTop; }
 
-            if (dc has :drawScaledBitmap) {
-                dc.drawScaledBitmap(x, y, targetSize, targetSize, icon);
-            } else {
-                var ox = (width / 2) - (icon.getWidth() / 2);
-                dc.drawBitmap(ox, y, icon);
+        if (icon != null) {
+            var x = ((width / 2) - (targetSize / 2)).toNumber();
+            try {
+                if (dc has :drawScaledBitmap) {
+                    dc.drawScaledBitmap(x, iconY, targetSize, targetSize, icon);
+                } else {
+                    var ox = ((width / 2) - (icon.getWidth() / 2)).toNumber();
+                    dc.drawBitmap(ox, iconY, icon);
+                }
+            } catch (ex) {
+                // Draw category label fallback if icon fails.
+                dc.setColor(accentColor, Graphics.COLOR_TRANSPARENT);
+                dc.drawText(width / 2, iconY + targetSize / 2, Graphics.FONT_SMALL,
+                    ProductClassifier.getCategoryLabel(item),
+                    Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
             }
+        } else {
+            // No icon — show category label in a tinted box.
+            var boxX = ((width / 2) - (targetSize / 2)).toNumber();
+            var fallbackBg = getBackgroundColor();
+            dc.setColor(fallbackBg, fallbackBg);
+            dc.fillRectangle(boxX, iconY, targetSize, targetSize);
+            dc.setColor(accentColor, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(width / 2, iconY + targetSize / 2, Graphics.FONT_XTINY,
+                ProductClassifier.getCategoryLabel(item),
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
 
+        // ── Item name ─────────────────────────────────────────────────────────
         dc.setColor(textColor, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
-            height * 0.64,
+            height * 0.52,
             Graphics.FONT_SMALL,
-            "AHORA",
+            truncateText(item.name, 18),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        dc.setColor(getCategoryColorForItem(item), Graphics.COLOR_TRANSPARENT);
+        // ── Nutrient delta (category color) ───────────────────────────────────
+        var cho = item.getNutrient("cho");
+        var na  = item.getNutrient("na");
+        var nutriLine = "";
+        if (cho > 0) { nutriLine = "+" + cho + "g CHO"; }
+        if (na > 0) {
+            if (!nutriLine.equals("")) { nutriLine += "  "; }
+            nutriLine += "+" + na + "mg Na";
+        }
+        if (!nutriLine.equals("")) {
+            dc.setColor(accentColor, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(
+                width / 2,
+                height * 0.62,
+                Graphics.FONT_XTINY,
+                nutriLine,
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+            );
+        }
+
+        // ── "TOMAR AHORA" full-width action strip ─────────────────────────────
+        var stripY = (height * 0.70).toNumber();
+        var stripH = (height * 0.15).toNumber();
+        if (stripH < 18) { stripH = 18; }
+        dc.setColor(accentColor, accentColor);
+        dc.fillRectangle((width * 0.04).toNumber(), stripY, (width * 0.92).toNumber(), stripH);
+        dc.setColor(0x1A202C, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
-            height * 0.72,
-            Graphics.FONT_XTINY,
-            ProductClassifier.getCategoryLabel(item),
+            stripY + stripH / 2,
+            Graphics.FONT_SMALL,
+            "TOMAR AHORA",
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        dc.setColor(0x4A5568, Graphics.COLOR_TRANSPARENT);
+        // ── Accumulated totals below strip ────────────────────────────────────
+        var consumedCHO = mEngine.getConsumedCHO();
+        var consumedNa  = mEngine.getConsumedNa();
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
-            height * 0.77,
+            height * 0.89,
             Graphics.FONT_XTINY,
-            "+" + item.getNutrient("cho") + "g CHO  +" + item.getNutrient("na") + "mg Na",
+            "Acum " + consumedCHO + "g CHO  " + consumedNa + "mg Na",
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
     }
@@ -1473,24 +1599,9 @@ class InnerDataField1View extends WatchUi.DataField {
 
     private function getCategoryColorForItem(item as NutritionItem) as Graphics.ColorType {
         var label = ProductClassifier.getCategoryLabel(item);
-
-        if (label.equals("BEBIDA") || label.equals("AGUA")) {
-            return 0x66CCFF;
-        }
-        if (label.equals("GEL")) {
-            return 0xFFD166;
-        }
-        if (label.equals("GOMINOLA")) {
-            return 0xFF99CC;
-        }
-        if (label.equals("ELECTROLITOS")) {
-            return 0x99FF99;
-        }
-        if (label.equals("CAFEINA")) {
-            return 0xFFE08A;
-        }
-
-        return Graphics.COLOR_BLACK;
+        var color = ProductClassifier.getCategoryColor(label);
+        // Fall back to black (dark field) rather than white for unknown items.
+        return color.equals(Graphics.COLOR_WHITE) ? Graphics.COLOR_BLACK : color;
     }
 
     private function rememberAutoConsumeNotice(item as NutritionItem) as Void {
@@ -1647,37 +1758,52 @@ class InnerDataField1View extends WatchUi.DataField {
         var contentBlockOffsetY = (height * 0.045).toNumber();
         var mediaBlockExtraOffsetY = (height * 0.055).toNumber();
 
-        // Light card to avoid a harsh black square on round watch screens.
-        dc.setColor(0xFFFFFF, 0xFFFFFF);
+        // Card background (device default).
+        var cardBg = getBackgroundColor();
+        dc.setColor(cardBg, cardBg);
         dc.fillRectangle(cardX, cardY, cardW, cardH);
-        dc.setColor(0xEF4444, Graphics.COLOR_TRANSPARENT);
+
+        // ── Green "REGISTRADO" header strip ───────────────────────────────────
+        var headerStripH = (cardH * 0.10).toNumber();
+        if (headerStripH < 12) { headerStripH = 12; }
+        dc.setColor(0x22C55E, 0x22C55E);
+        dc.fillRectangle(cardX, cardY, cardW, headerStripH);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        var registradoLabel = overlayTotal > 1
+            ? ("REGISTRADO  " + overlayStep + "/" + overlayTotal)
+            : "REGISTRADO";
         dc.drawText(
             width / 2,
-            cardY + (cardH * 0.05),
+            cardY + headerStripH / 2,
             Graphics.FONT_XTINY,
-            overlayTotal > 1 ? ("ALERTA " + overlayStep + "/" + overlayTotal) : "ALERTA",
+            registradoLabel,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
+        // ── Item name ─────────────────────────────────────────────────────────
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
-            cardY + (cardH * 0.13) + contentBlockOffsetY,
+            cardY + (cardH * 0.15) + contentBlockOffsetY,
             Graphics.FONT_SMALL,
             truncateText(overlayEntryName, 18),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
+        // ── Product icon ──────────────────────────────────────────────────────
         drawRecentAutoConsumeOverlayIcon(
             dc,
             (width / 2).toNumber(),
-            (cardY + (cardH * 0.20) + contentBlockOffsetY + mediaBlockExtraOffsetY).toNumber(),
+            (cardY + (cardH * 0.22) + contentBlockOffsetY + mediaBlockExtraOffsetY).toNumber(),
             cardH,
             overlayEntryIcon,
             overlayEntryCategory
         );
 
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+        // ── Category + nutrient delta ─────────────────────────────────────────
+        var catColor = ProductClassifier.getCategoryColor(overlayEntryCategory);
+        dc.setColor(catColor.equals(Graphics.COLOR_WHITE) ? Graphics.COLOR_BLACK : catColor,
+            Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
             cardY + (cardH * 0.72) + contentBlockOffsetY + mediaBlockExtraOffsetY,
@@ -1686,28 +1812,18 @@ class InnerDataField1View extends WatchUi.DataField {
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        dc.setColor(0x4A5568, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(0x374151, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
             cardY + (cardH * 0.82) + contentBlockOffsetY + mediaBlockExtraOffsetY,
             Graphics.FONT_XTINY,
-            "CHO " + overlayEntryCHO + "g  Na " + overlayEntryNa + "mg",
+            "+" + overlayEntryCHO + "g CHO  +" + overlayEntryNa + "mg Na",
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        if (overlayTotal > 1 && !mRecentAutoConsumeBatchNames.equals("")) {
-            dc.setColor(0x64748B, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(
-                width / 2,
-                cardY + (cardH * 0.91) + contentBlockOffsetY + mediaBlockExtraOffsetY,
-                Graphics.FONT_XTINY,
-                truncateText(mRecentAutoConsumeBatchNames, 22),
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-            );
-        }
 
         if (mDebugOverlayTiming) {
-            dc.setColor(0x64748B, Graphics.COLOR_TRANSPARENT);
+            dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
                 cardX + 6,
                 cardY + 6,
@@ -1727,19 +1843,14 @@ class InnerDataField1View extends WatchUi.DataField {
         icon,
         categoryLabel as String
     ) as Void {
-        var boxSize = (cardH * 0.46).toNumber();
-        if (boxSize < 72) {
-            boxSize = 72;
-        }
-        if (boxSize > 118) {
-            boxSize = 118;
+        var boxSize = (cardH * 0.52).toNumber();
+        if (boxSize < 80) {
+            boxSize = 80;
         }
 
         var boxX = (centerX - (boxSize / 2)).toNumber();
         var boxY = topY.toNumber();
 
-        dc.setColor(0xF8FAFC, 0xF8FAFC);
-        dc.fillRectangle(boxX, boxY, boxSize, boxSize);
 
         if (icon == null) {
             dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
@@ -1767,37 +1878,12 @@ class InnerDataField1View extends WatchUi.DataField {
         }
     }
 
-    private function getCategoryColorByLabel(label as String) as Graphics.ColorType {
-        if (label.equals("BEBIDA") || label.equals("AGUA")) {
-            return 0x66CCFF;
-        }
-        if (label.equals("GEL")) {
-            return 0xFFD166;
-        }
-        if (label.equals("GOMINOLA")) {
-            return 0xFF99CC;
-        }
-        if (label.equals("ELECTROLITOS")) {
-            return 0x99FF99;
-        }
-        if (label.equals("CAFEINA")) {
-            return 0xFFE08A;
-        }
-        return Graphics.COLOR_WHITE;
-    }
-
     private function drawContentCard(dc as Graphics.Dc, width as Number, height as Number) as Void {
         var x = (width * 0.04).toNumber();
         var y = (height * 0.04).toNumber();
         var w = (width * 0.92).toNumber();
         var h = (height * 0.92).toNumber();
 
-        dc.setColor(0xFFFFFF, 0xFFFFFF);
-        dc.fillRectangle(x, y, w, h);
-        dc.setColor(0xD7DEE6, Graphics.COLOR_TRANSPARENT);
-        if (dc has :drawRectangle) {
-            dc.drawRectangle(x, y, w, h);
-        }
     }
 
     private function drawProgressBar(
@@ -1807,10 +1893,10 @@ class InnerDataField1View extends WatchUi.DataField {
         ratio as Float,
         accentColor as Graphics.ColorType
     ) as Void {
-        var barW = (width * 0.76).toNumber();
-        var barH = 6;
+        var barW = (width * 0.92).toNumber();
+        var barH = 5;
         var barX = ((width - barW) / 2).toNumber();
-        var barY = (height * 0.14).toNumber();
+        var barY = (height * 0.03).toNumber();
 
         var safeRatio = ratio;
         if (safeRatio < 0.0) {
@@ -1839,30 +1925,82 @@ class InnerDataField1View extends WatchUi.DataField {
         }
 
         var chipText = truncateText(text, 22);
-        var chipW = (chipText.length() * 7) + 20;
-        var maxChipW = (width * 0.84).toNumber();
+        // Use dc.getTextDimensions for pixel-accurate chip width when available.
+        var chipW = (chipText.length() * 7) + 16;
+        if (dc has :getTextDimensions) {
+            var dims = dc.getTextDimensions(chipText, Graphics.FONT_XTINY);
+            chipW = (dims[0]).toNumber() + 16;
+        }
+        var maxChipW = (width * 0.80).toNumber();
         if (chipW > maxChipW) {
             chipW = maxChipW;
         }
 
-        var chipH = 16;
+        var chipFont = pickFont(height, "label");
+        var chipH = 15;
         var chipX = ((width - chipW) / 2).toNumber();
-        var chipY = (height * 0.17).toNumber();
-
-        dc.setColor(0xEDF2F7, 0xEDF2F7);
-        dc.fillRectangle(chipX, chipY, chipW, chipH);
-        dc.setColor(accentColor, Graphics.COLOR_TRANSPARENT);
-        if (dc has :drawRectangle) {
-            dc.drawRectangle(chipX, chipY, chipW, chipH);
-        }
+        var chipY = (height * 0.13).toNumber();
 
         dc.drawText(
             width / 2,
             chipY + (chipH / 2),
-            Graphics.FONT_XTINY,
+            chipFont,
             chipText,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
+    }
+
+    // ── Adaptive font helpers ────────────────────────────────────────────────
+    // Returns a font scaled to the field height.
+    //   "label"     — small labels (CHO/h, PROXIMA TOMA, plan header, chip)
+    //   "value"     — metric values (item name uses FONT_SMALL/MEDIUM baseline)
+    //   "countdown" — large numeric countdown
+    private function pickFont(height as Number, kind as String) as Graphics.FontType {
+        if (kind.equals("countdown")) {
+            return height > 200 ? Graphics.FONT_NUMBER_MEDIUM : Graphics.FONT_NUMBER_MILD;
+        }
+        if (kind.equals("value")) {
+            if (height > 300) { return Graphics.FONT_MEDIUM; }
+            if (height > 160) { return Graphics.FONT_SMALL; }
+            return Graphics.FONT_TINY;
+        }
+        // "label" default
+        if (height > 300) { return Graphics.FONT_SMALL; }
+        if (height > 160) { return Graphics.FONT_TINY; }
+        return Graphics.FONT_XTINY;
+    }
+
+    /*
+     * Draws ambient temperature with a risk-color at the top-right of the HUD.
+     * Only called when the device actually provides ambientTemperature data.
+     *
+     * Risk scale:
+     *   < 15°C  → blue   (cold)
+     *   15-22°C → green  (optimal)
+     *   22-28°C → yellow (moderate)
+     *   28-35°C → orange (high)
+     *   ≥ 35°C  → red    (critical)
+     */
+    private function drawTemperatureIndicator(dc as Graphics.Dc, width as Number, height as Number, temp as Float) as Void {
+        var tempInt = temp.toNumber();
+        var tempText = tempInt + "C";
+        var riskColor = getTemperatureRiskColor(temp);
+        dc.setColor(riskColor, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(
+            width - 4,
+            height * 0.09,
+            Graphics.FONT_XTINY,
+            tempText,
+            Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER
+        );
+    }
+
+    private function getTemperatureRiskColor(temp as Float) as Graphics.ColorType {
+        if (temp < 15.0f) { return 0x66CCFF; }  // blue  – cold
+        if (temp < 22.0f) { return 0x22C55E; }  // green – optimal
+        if (temp < 28.0f) { return 0xFFD166; }  // yellow – moderate
+        if (temp < 35.0f) { return 0xF97316; }  // orange – high
+        return 0xEF4444;                         // red    – critical
     }
 
     private function buildTopStatusText() as String {
@@ -1937,6 +2075,7 @@ class InnerDataField1View extends WatchUi.DataField {
     private function resetAlertTracking() as Void {
         mLastAlertItemId = "";
         mLastAlertAtSec = -9999;
+        mLastAlertMinuteBucket = -1;
         mDueIconCacheItemId = "";
         mDueIconCache = null;
         mLastBackgroundSyncSec = -9999;

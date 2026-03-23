@@ -40,4 +40,7 @@
     <bitmap id="IconAgua150" filename="ICONOS GARMIN/MONODOSIS/agua-150ml-iconos-inner-garmin.png" dithering="none" />
     <bitmap id="IconAgua250" filename="ICONOS GARMIN/MONODOSIS/agua-250ml-iconos-inner-garmin.png" dithering="none" />
     <bitmap id="IconCafeina" filename="ICONOS GARMIN/OTROS/producto-inner-electrolytes-lite.png" dithering="none" />
+
+    <!-- Brand logo -->
+    <bitmap id="InnerLogo" filename="logo/inner_logo.png" dithering="none" />
 </drawables>

@@ -35,4 +35,9 @@
     <string id="DrinkLabel">Beber</string>
     <string id="EatLabel">Comer</string>
     <string id="OkButton">OK</string>
+
+    <!-- Missing Spanish overrides -->
+    <string id="PairingCodeTitle">Codigo de Sincronizacion</string>
+    <string id="ApiUrlTitle">URL de API</string>
+    <string id="AutoConsumePlannedItemsTitle">Auto-consumir Elementos del Plan</string>
 </strings>

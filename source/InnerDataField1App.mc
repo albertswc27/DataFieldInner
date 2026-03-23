@@ -126,18 +126,22 @@ class InnerDataField1App extends Application.AppBase {
     }
 
     private function ensurePairingCodeBootstrap() as Void {
-        var current = Application.Properties.getValue("pairingCode");
-        if (current != null) {
-            var normalized = normalizePairingCode(current.toString());
-            if (!normalized.equals("")) {
-                return;
-            }
-        }
-
+        // When BOOTSTRAP_PAIRING_CODE is set, ensure the property matches it.
+        // When empty, force-clear any cached value so the "Sin Plan" screen shows.
         if (BOOTSTRAP_PAIRING_CODE != null && !BOOTSTRAP_PAIRING_CODE.equals("")) {
+            var current = Application.Properties.getValue("pairingCode");
+            if (current != null) {
+                var normalized = normalizePairingCode(current.toString());
+                if (!normalized.equals("")) {
+                    return;
+                }
+            }
             Application.Properties.setValue("pairingCode", BOOTSTRAP_PAIRING_CODE);
             mSettingsVersion += 1;
             System.println("pairingCode bootstrap applied");
+        } else {
+            // Force clear for testing "no code" state.
+            Application.Properties.setValue("pairingCode", "");
         }
     }
 
