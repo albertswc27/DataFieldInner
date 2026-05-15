@@ -13,6 +13,11 @@ class SyncService {
     private const ACTIVE_PLAN_PROPERTY_KEY = "nutritionPlan";
     private const SELECTED_PLAN_ID_PROPERTY_KEY = "selectedPlanId";
     private const SELECTED_PLAN_STORAGE_KEY = "ifpSelectedPlanDict";
+    private const MAX_PROPERTY_JSON_CHARS = 10000;
+    // ETag enviado en `If-None-Match` para que el backend responda 304 si el
+    // plan no ha cambiado desde la Ãºltima sync. CIQ no expone headers de
+    // respuesta, asÃ­ que el backend duplica el etag dentro del body en 200.
+    private const SYNC_ETAG_STORAGE_KEY = "garminSyncEtag";
 
     // Singleton instance
     private static var _instance as SyncService?;
@@ -108,7 +113,36 @@ class SyncService {
     function onReceivePlans(responseCode as Number, data as Dictionary or String or Null) as Void {
         System.println("Response code: " + responseCode + " (code=" + _activePairingCode + ")");
 
+        // 304 Not Modified: el plan no ha cambiado desde el Ãºltimo sync.
+        // Mantener cache local intacto.
+        if (responseCode == 304) {
+            _lastSyncTime = System.getTimer();
+            System.println("Plan unchanged (304); keeping cached payload");
+            reportSyncResult(true, responseCode, getCachedPlanCount(), getSelectedPlanIdSafe(), "");
+            finishSync(true, "Sin cambios");
+            return;
+        }
+
         if (responseCode >= 200 && responseCode < 300 && data != null) {
+            // Guardar nuevo ETag si el backend lo devuelve dentro del body.
+            // CIQ Communications no expone los headers de respuesta al callback.
+            if (data instanceof Dictionary) {
+                var dataDict = data as Dictionary;
+                if (dataDict.hasKey("etag")) {
+                    var etagValue = dataDict["etag"];
+                    if (etagValue != null && etagValue instanceof String) {
+                        try {
+                            Application.Storage.setValue(
+                                SYNC_ETAG_STORAGE_KEY,
+                                etagValue as String
+                            );
+                        } catch (etagEx) {
+                            System.println("ETag write failed: " + etagEx.getErrorMessage());
+                        }
+                    }
+                }
+            }
+
             var payload = extractPlansPayload(data);
             if (payload != null && payload.hasKey("plans")) {
                 var plansArray = payload["plans"] as Array<Dictionary>;
@@ -117,6 +151,7 @@ class SyncService {
                     persistPlans(plansArray, activePlanId);
                     _lastSyncTime = System.getTimer();
                     System.println("Plans synced successfully: " + plansArray.size().format("%d"));
+                    reportSyncResult(true, responseCode, plansArray.size(), activePlanId, "");
                     finishSync(true, "Sincronizado (" + plansArray.size().format("%d") + ")");
                     return;
                 }
@@ -129,8 +164,18 @@ class SyncService {
                 return;
             }
 
+            reportSyncResult(false, responseCode, 0, "", "no_plans");
             finishSync(false, "Sin planes");
             return;
+        }
+
+        // Cualquier error: invalidar ETag para forzar full-sync en el prÃ³ximo intento.
+        if (responseCode >= 400) {
+            try {
+                Application.Storage.deleteValue(SYNC_ETAG_STORAGE_KEY);
+            } catch (delEx) {
+                // ignore
+            }
         }
 
         // Error response. Retry with alternate code format if available.
@@ -140,6 +185,7 @@ class SyncService {
             return;
         }
 
+        reportSyncResult(false, responseCode, 0, "", "http_" + responseCode.format("%d"));
         finishSync(false, "Error " + responseCode);
     }
 
@@ -153,10 +199,24 @@ class SyncService {
         _pendingPairingCodes.remove(_activePairingCode);
 
         try {
-            var url = _apiUrl + "/getPlans?code=" + _activePairingCode;
+            var url = appendSyncTraceParams(_apiUrl + "/getPlans?code=" + _activePairingCode);
+            var headers = {} as Dictionary<String, String>;
+            try {
+                var storedEtag = Application.Storage.getValue(SYNC_ETAG_STORAGE_KEY);
+                if (storedEtag != null && storedEtag instanceof String) {
+                    var etagText = storedEtag as String;
+                    if (!etagText.equals("")) {
+                        headers.put("If-None-Match", etagText);
+                    }
+                }
+            } catch (etagEx) {
+                System.println("ETag read failed: " + etagEx.getErrorMessage());
+            }
+
             var options = {
                 :method => Communications.HTTP_REQUEST_METHOD_GET,
-                :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+                :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON,
+                :headers => headers
             };
 
             System.println("Downloading plans from: " + url);
@@ -184,18 +244,20 @@ class SyncService {
 
     private function persistPlans(plansArray as Array<Dictionary>, activePlanIdHint as String) as Void {
         // Persist full plans payload for future plan switching.
-        Application.Properties.setValue(
+        writePropertyJsonIfSafe(
             PLANS_PROPERTY_KEY,
-            convertPlansEnvelopeToJson(plansArray)
+            convertPlansEnvelopeToJson(plansArray),
+            "plans envelope"
         );
 
         // Persist selected plan as legacy single-plan key for compatibility.
         var selectedPlan = resolveSelectedPlan(plansArray, activePlanIdHint);
         if (selectedPlan != null) {
             var selectedPlanId = getDictionaryString(selectedPlan, "id", "");
-            Application.Properties.setValue(
+            writePropertyJsonIfSafe(
                 ACTIVE_PLAN_PROPERTY_KEY,
-                convertPlanToJson(selectedPlan)
+                convertPlanToJson(selectedPlan),
+                "active plan"
             );
 
             _lastSyncedPlan = buildPlanFromDictionary(selectedPlan);
@@ -211,6 +273,172 @@ class SyncService {
                 Application.Properties.setValue(SELECTED_PLAN_ID_PROPERTY_KEY, selectedPlanId);
             }
         }
+    }
+
+    private function writePropertyJsonIfSafe(key as String, jsonText as String, label as String) as Void {
+        try {
+            if (jsonText != null && jsonText.length() <= MAX_PROPERTY_JSON_CHARS) {
+                Application.Properties.setValue(key, jsonText);
+                return;
+            }
+
+            Application.Properties.setValue(key, "");
+            var sizeText = jsonText == null ? "null" : jsonText.length().format("%d");
+            System.println("Skip " + key + " write (" + label + " too large: " + sizeText + " chars)");
+        } catch (ex) {
+            System.println("Property write failed for " + key + ": " + ex.getErrorMessage());
+        }
+    }
+
+    function onReportSyncComplete(responseCode as Number, data as Dictionary or String or Null) as Void {
+        System.println("Sync telemetry response: " + responseCode);
+    }
+
+    private function reportSyncResult(
+        success as Boolean,
+        responseCode as Number,
+        planCount as Number,
+        activePlanId as String,
+        errorCode as String
+    ) as Void {
+        if (_activePairingCode == null || _activePairingCode.equals("")) {
+            return;
+        }
+
+        try {
+            var payload = buildDeviceInfo();
+            payload["code"] = _activePairingCode;
+            payload["status"] = success ? "success" : "failure";
+            payload["responseCode"] = responseCode;
+            payload["planCount"] = planCount;
+            payload["activePlanId"] = activePlanId == null ? "" : activePlanId;
+            payload["errorCode"] = errorCode == null ? "" : errorCode;
+
+            var options = {
+                :method => Communications.HTTP_REQUEST_METHOD_POST,
+                :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON,
+                :headers => {
+                    "Content-Type" => Communications.REQUEST_CONTENT_TYPE_URL_ENCODED
+                }
+            };
+
+            Communications.makeWebRequest(
+                _apiUrl + "/reportGarminSync",
+                payload,
+                options,
+                method(:onReportSyncComplete)
+            );
+        } catch (ex) {
+            System.println("Sync telemetry failed: " + ex.getErrorMessage());
+        }
+    }
+
+    private function appendSyncTraceParams(baseUrl as String) as String {
+        var info = buildDeviceInfo();
+        var url = baseUrl + "&dfBuild=" + sanitizeQueryValue(BuildInfo.getBuild());
+
+        if (info.hasKey("devicePart")) {
+            url += "&devicePart=" + sanitizeQueryValue(info["devicePart"]);
+        }
+        if (info.hasKey("firmware")) {
+            url += "&fw=" + sanitizeQueryValue(info["firmware"]);
+        }
+        if (info.hasKey("ciq")) {
+            url += "&ciq=" + sanitizeQueryValue(info["ciq"]);
+        }
+
+        return url;
+    }
+
+    private function buildDeviceInfo() as Dictionary {
+        var info = {
+            "dfBuild" => BuildInfo.getBuild()
+        } as Dictionary;
+
+        try {
+            var settings = System.getDeviceSettings();
+            if (settings != null) {
+                if (settings has :partNumber && settings.partNumber != null) {
+                    info["devicePart"] = settings.partNumber.toString();
+                }
+                if (settings has :firmwareVersion && settings.firmwareVersion != null) {
+                    info["firmware"] = formatVersionValue(settings.firmwareVersion);
+                }
+                if (settings has :monkeyVersion && settings.monkeyVersion != null) {
+                    info["ciq"] = formatVersionValue(settings.monkeyVersion);
+                }
+            }
+        } catch (ex) {
+            System.println("Device info unavailable: " + ex.getErrorMessage());
+        }
+
+        return info;
+    }
+
+    private function formatVersionValue(value) as String {
+        if (value == null) {
+            return "";
+        }
+
+        if (value instanceof Array) {
+            var parts = value as Array;
+            var text = "";
+            for (var i = 0; i < parts.size(); i++) {
+                if (i > 0) {
+                    text += ".";
+                }
+                text += parts[i].toString();
+            }
+            return text;
+        }
+
+        return value.toString();
+    }
+
+    private function sanitizeQueryValue(value) as String {
+        if (value == null) {
+            return "";
+        }
+
+        var text = value.toString();
+        var output = "";
+        var allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_";
+        for (var i = 0; i < text.length(); i++) {
+            var ch = text.substring(i, i + 1);
+            if (allowed.find(ch) != null) {
+                output += ch;
+            }
+        }
+        return output;
+    }
+
+    private function getCachedPlanCount() as Number {
+        if (_lastSyncedPlan != null && (_lastSyncedPlan as NutritionPlan).hasItems()) {
+            return 1;
+        }
+
+        try {
+            var stored = Application.Storage.getValue(SELECTED_PLAN_STORAGE_KEY);
+            if (stored != null && stored instanceof Dictionary) {
+                return 1;
+            }
+        } catch (ex) {
+            // ignore
+        }
+
+        return 0;
+    }
+
+    private function getSelectedPlanIdSafe() as String {
+        try {
+            var value = Application.Properties.getValue(SELECTED_PLAN_ID_PROPERTY_KEY);
+            if (value != null) {
+                return value.toString();
+            }
+        } catch (ex) {
+            // ignore
+        }
+        return "";
     }
 
     function getLastSyncedPlan() as NutritionPlan? {

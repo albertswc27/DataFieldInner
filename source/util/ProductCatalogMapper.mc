@@ -106,6 +106,7 @@ class ProductCatalogMapper {
         // Hydro gels
         if (startsWith(code, "glut5-hydro-fresa") || startsWith(code, "gelhydro35_fresa")) { return macros(35, 200); }
         if (startsWith(code, "glut5-hydro-platano") || startsWith(code, "gelhydro35_platano")) { return macros(35, 200); }
+        if (startsWith(code, "glut5-hydro-limon")) { return macros(35, 200); }
         if (startsWith(code, "glut5-hydro-45-cafe") || startsWith(code, "gelhydro45_cafe")) { return macros(45, 275); }
         if (startsWith(code, "glut5-hydro-45-neutro") || startsWith(code, "gelhydro45_neutro")) { return macros(45, 275); }
         if (startsWith(code, "glut5-hydro-45-naranja") || startsWith(code, "gelhydro45_naranja")) { return macros(45, 275); }
@@ -136,6 +137,13 @@ class ProductCatalogMapper {
             startsWith(code, "sales") ||
             startsWith(code, "pastillas")) {
             return macros(0, 200);
+        }
+
+        if (startsWith(code, "recovery-shot") ||
+            startsWith(code, "glycogen-recovery") ||
+            startsWith(code, "glycogen-recuperacion") ||
+            startsWith(code, "tart_cherry")) {
+            return macros(0, 0);
         }
 
         return getNameBasedMacros(itemName);
@@ -259,7 +267,7 @@ class ProductCatalogMapper {
             startsWith(code, "gel60_") || startsWith(code, "iso_") || startsWith(code, "glut5_") ||
             code.equals("electrolytes") || code.equals("electro_gummy") || code.equals("carbo_gummy") ||
             code.equals("carbo_gummy_fresa") || code.equals("buffer") || code.equals("agua_150") ||
-            code.equals("agua_250") || code.equals("cafeina")) {
+            code.equals("agua_250") || code.equals("cafeina") || code.equals("tart_cherry")) {
             return code;
         }
 
@@ -272,6 +280,7 @@ class ProductCatalogMapper {
 
         if (startsWith(code, "glut5-hydro-fresa")) { return "gelhydro35_fresa"; }
         if (startsWith(code, "glut5-hydro-platano")) { return "gelhydro35_platano"; }
+        if (startsWith(code, "glut5-hydro-limon")) { return "gelhydro35_fresa"; }
         if (startsWith(code, "glut5-hydro-45-cafe")) { return "gelhydro45_cafe"; }
         if (startsWith(code, "glut5-hydro-45-neutro")) { return "gelhydro45_neutro"; }
         if (startsWith(code, "glut5-hydro-45-naranja")) { return "gelhydro45_naranja"; }
@@ -290,6 +299,10 @@ class ProductCatalogMapper {
         if (startsWith(code, "glut5-drink-")) { return "glut5_250"; }
 
         if (startsWith(code, "pastillas-sales-200mg") || startsWith(code, "electrolyte-lite-120-pack")) { return "electrolytes"; }
+
+        if (startsWith(code, "recovery-shot") ||
+            startsWith(code, "glycogen-recovery") ||
+            startsWith(code, "glycogen-recuperacion")) { return "tart_cherry"; }
 
         return null;
     }
@@ -331,6 +344,7 @@ class ProductCatalogMapper {
         if (out.equals("carbo-gummy-fresa")) { out = "carbo_gummy_fresa"; }
         if (out.equals("agua-150")) { out = "agua_150"; }
         if (out.equals("agua-250")) { out = "agua_250"; }
+        if (out.equals("tart-cherry")) { out = "tart_cherry"; }
 
         return out;
     }

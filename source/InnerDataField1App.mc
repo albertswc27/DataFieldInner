@@ -5,8 +5,6 @@ import Toybox.System;
 
 class InnerDataField1App extends Application.AppBase {
     hidden var mSettingsVersion as Number = 0;
-    private const BOOTSTRAP_PAIRING_CODE = "";
-
     function initialize() {
         AppBase.initialize();
         mSettingsVersion = 0;
@@ -14,7 +12,6 @@ class InnerDataField1App extends Application.AppBase {
 
     // onStart() is called on application start up
     function onStart(state as Dictionary?) as Void {
-        ensurePairingCodeBootstrap();
         System.println("INNER DataField App started");
     }
 
@@ -125,25 +122,6 @@ class InnerDataField1App extends Application.AppBase {
         return [ new InnerDataField1View() ];
     }
 
-    private function ensurePairingCodeBootstrap() as Void {
-        // When BOOTSTRAP_PAIRING_CODE is set, ensure the property matches it.
-        // When empty, force-clear any cached value so the "Sin Plan" screen shows.
-        if (BOOTSTRAP_PAIRING_CODE != null && !BOOTSTRAP_PAIRING_CODE.equals("")) {
-            var current = Application.Properties.getValue("pairingCode");
-            if (current != null) {
-                var normalized = normalizePairingCode(current.toString());
-                if (!normalized.equals("")) {
-                    return;
-                }
-            }
-            Application.Properties.setValue("pairingCode", BOOTSTRAP_PAIRING_CODE);
-            mSettingsVersion += 1;
-            System.println("pairingCode bootstrap applied");
-        } else {
-            // Force clear for testing "no code" state.
-            Application.Properties.setValue("pairingCode", "");
-        }
-    }
 
     private function validatePairingCode(value) as Lang.Boolean or Lang.String {
         if (!(value instanceof String)) {

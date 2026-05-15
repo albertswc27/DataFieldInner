@@ -11,9 +11,6 @@ import Toybox.WatchUi;
  * Session progression is delegated to NutritionSessionEngine.
  */
 class InnerDataField1View extends WatchUi.DataField {
-    // Manual build marker to validate which PRG is actually loaded in simulator.
-    private const BUILD_MARKER = "B260317-01";
-
     hidden var mEngine as NutritionSessionEngine;
 
     hidden var mToleranceSec as Number = 30;
@@ -90,7 +87,7 @@ class InnerDataField1View extends WatchUi.DataField {
         }
         mLastSettingsVersion = readSettingsVersion();
 
-        System.println("INNER DataField initialized");
+        System.println("INNER DataField initialized build=" + BuildInfo.getBuild());
     }
 
     function onLayout(dc as Graphics.Dc) as Void {
@@ -1159,6 +1156,15 @@ class InnerDataField1View extends WatchUi.DataField {
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
         }
+
+        dc.setColor(0x9CA3AF, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(
+            centerX,
+            height * 0.91,
+            Graphics.FONT_XTINY,
+            truncateText(BuildInfo.getBuild(), 30),
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+        );
     }
 
     private function drawCompleted(dc as Graphics.Dc, width as Number, height as Number, textColor as Graphics.ColorType) as Void {
@@ -1251,7 +1257,7 @@ class InnerDataField1View extends WatchUi.DataField {
 
         // Plan name + item counter on one compact line.
         var headerName = mUseFreeMode ? "MODO LIBRE" : plan.name;
-        if (mUseQuickDemoPlan) { headerName = BUILD_MARKER; }
+        if (mUseQuickDemoPlan) { headerName = BuildInfo.getBuild(); }
         headerName = truncateText(headerName, 14);
         var headerText = headerName + "  " + mEngine.getCurrentIndexOneBased() + "/" + plan.getItemCount();
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
