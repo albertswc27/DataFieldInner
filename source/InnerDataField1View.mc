@@ -358,7 +358,17 @@ class InnerDataField1View extends WatchUi.DataField {
                     mFreeMaxDurationMin * 60
                 );
             } else {
-                plan = SyncService.getInstance().loadPersistedSelectedPlan();
+                // Multi-plan offline desde Storage (sin el limite de 10000 chars de
+                // las propiedades string): permite seleccionar/cambiar de plan con
+                // selectedPlanId aunque el envelope JSON no quepa en una propiedad.
+                var storedPlans = SyncService.getInstance().loadPersistedAllPlans();
+                if (storedPlans != null && storedPlans.size() > 0) {
+                    plan = selectPlan(storedPlans, mSelectedPlanId);
+                }
+
+                if (plan == null) {
+                    plan = SyncService.getInstance().loadPersistedSelectedPlan();
+                }
 
                 // Fast path: use pre-selected single plan JSON first.
                 if (plan == null) {
@@ -1854,7 +1864,6 @@ class InnerDataField1View extends WatchUi.DataField {
             boxSize = 80;
         }
 
-        var boxX = (centerX - (boxSize / 2)).toNumber();
         var boxY = topY.toNumber();
 
 
@@ -1885,11 +1894,7 @@ class InnerDataField1View extends WatchUi.DataField {
     }
 
     private function drawContentCard(dc as Graphics.Dc, width as Number, height as Number) as Void {
-        var x = (width * 0.04).toNumber();
-        var y = (height * 0.04).toNumber();
-        var w = (width * 0.92).toNumber();
-        var h = (height * 0.92).toNumber();
-
+        // Reserved hook: the content card background is currently drawn elsewhere.
     }
 
     private function drawProgressBar(
@@ -1944,7 +1949,6 @@ class InnerDataField1View extends WatchUi.DataField {
 
         var chipFont = pickFont(height, "label");
         var chipH = 15;
-        var chipX = ((width - chipW) / 2).toNumber();
         var chipY = (height * 0.13).toNumber();
 
         dc.drawText(
