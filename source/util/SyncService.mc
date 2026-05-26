@@ -203,7 +203,15 @@ class SyncService {
         _pendingPairingCodes.remove(_activePairingCode);
 
         try {
-            var url = appendSyncTraceParams(_apiUrl + "/getPlans?code=" + _activePairingCode);
+            // Fase 2 (contrato v2): si hay un plan seleccionado, pedirlo completo
+            // bajo demanda con &planId. El backend devuelve ese plan; sin selección
+            // devuelve el plan activo completo + metadata ligera del resto.
+            var baseUrl = _apiUrl + "/getPlans?code=" + _activePairingCode;
+            var selectedPlanId = getSelectedPlanIdSafe();
+            if (selectedPlanId != null && !selectedPlanId.equals("")) {
+                baseUrl += "&planId=" + sanitizeQueryValue(selectedPlanId);
+            }
+            var url = appendSyncTraceParams(baseUrl);
             var headers = {} as Dictionary<String, String>;
             try {
                 var storedEtag = Application.Storage.getValue(SYNC_ETAG_STORAGE_KEY);
