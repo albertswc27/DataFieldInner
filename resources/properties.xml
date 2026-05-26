@@ -120,7 +120,7 @@
     </settings>
     
     <strings>
-        <string id="AppName">INNER Nutrition</string>
+        <string id="AppName">INNER</string>
         
         <!-- Sync Settings -->
         <string id="PairingCodeTitle">Pairing Code (from web)</string>
