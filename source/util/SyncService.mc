@@ -13,6 +13,10 @@ class SyncService {
     private const ACTIVE_PLAN_PROPERTY_KEY = "nutritionPlan";
     private const SELECTED_PLAN_ID_PROPERTY_KEY = "selectedPlanId";
     private const SELECTED_PLAN_STORAGE_KEY = "ifpSelectedPlanDict";
+    // Envelope multi-plan en Storage (Dictionary/Array nativo), sin el limite de
+    // MAX_PROPERTY_JSON_CHARS que aplica a las propiedades string. Permite cambiar
+    // de plan offline aunque el JSON del envelope no quepa en una propiedad.
+    private const ALL_PLANS_STORAGE_KEY = "ifpAllPlansDict";
     private const MAX_PROPERTY_JSON_CHARS = 10000;
     // ETag enviado en `If-None-Match` para que el backend responda 304 si el
     // plan no ha cambiado desde la Ãºltima sync. CIQ no expone headers de
@@ -199,7 +203,15 @@ class SyncService {
         _pendingPairingCodes.remove(_activePairingCode);
 
         try {
-            var url = appendSyncTraceParams(_apiUrl + "/getPlans?code=" + _activePairingCode);
+            // Fase 2 (contrato v2): si hay un plan seleccionado, pedirlo completo
+            // bajo demanda con &planId. El backend devuelve ese plan; sin selección
+            // devuelve el plan activo completo + metadata ligera del resto.
+            var baseUrl = _apiUrl + "/getPlans?code=" + _activePairingCode;
+            var selectedPlanId = getSelectedPlanIdSafe();
+            if (selectedPlanId != null && !selectedPlanId.equals("")) {
+                baseUrl += "&planId=" + sanitizeQueryValue(selectedPlanId);
+            }
+            var url = appendSyncTraceParams(baseUrl);
             var headers = {} as Dictionary<String, String>;
             try {
                 var storedEtag = Application.Storage.getValue(SYNC_ETAG_STORAGE_KEY);
@@ -249,6 +261,15 @@ class SyncService {
             convertPlansEnvelopeToJson(plansArray),
             "plans envelope"
         );
+
+        // Persist the complete plans array in Storage (no 10000-char limit) so the
+        // user can switch between synced plans offline even when the JSON envelope
+        // exceeds the property size cap.
+        try {
+            Application.Storage.setValue(ALL_PLANS_STORAGE_KEY, plansArray);
+        } catch (allPlansEx) {
+            System.println("All plans storage write failed: " + allPlansEx.getErrorMessage());
+        }
 
         // Persist selected plan as legacy single-plan key for compatibility.
         var selectedPlan = resolveSelectedPlan(plansArray, activePlanIdHint);
@@ -456,6 +477,31 @@ class SyncService {
         }
 
         return null;
+    }
+
+    /*
+     * Load every plan persisted in the last sync from Storage. Used for offline
+     * plan switching (selectedPlanId) without the property string size cap.
+     */
+    function loadPersistedAllPlans() as Array<NutritionPlan> {
+        var result = [] as Array<NutritionPlan>;
+        try {
+            var stored = Application.Storage.getValue(ALL_PLANS_STORAGE_KEY);
+            if (stored != null && stored instanceof Array) {
+                var arr = stored as Array;
+                for (var i = 0; i < arr.size(); i++) {
+                    if (arr[i] instanceof Dictionary) {
+                        var parsed = buildPlanFromDictionary(arr[i] as Dictionary);
+                        if (parsed != null) {
+                            result.add(parsed);
+                        }
+                    }
+                }
+            }
+        } catch (ex) {
+            System.println("loadPersistedAllPlans failed: " + ex.getErrorMessage());
+        }
+        return result;
     }
 
     private function buildPlanFromDictionary(planDict as Dictionary or Null) as NutritionPlan? {
