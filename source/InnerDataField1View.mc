@@ -191,7 +191,7 @@ class InnerDataField1View extends WatchUi.DataField {
         dc.setColor(bgColor, bgColor);
         dc.fillRectangle(0, 0, width, height);
 
-        var textColor = Graphics.COLOR_BLACK;
+        var textColor = Graphics.COLOR_WHITE;
         if (plan == null || !plan.hasItems()) {
             drawNoPlan(dc, width, height, textColor);
             return;
@@ -578,6 +578,9 @@ class InnerDataField1View extends WatchUi.DataField {
             if (mSoundEnabled) {
                 AlertHelper.triggerSound();
             }
+            // Backlight siempre: refuerza el aviso en cualquier pantalla
+            // (Edge con auto-dim agresivo no muestra la vibración/tono visualmente).
+            AlertHelper.triggerBacklight();
         } catch (ex) {
             System.println("triggerAlert error: " + ex.getErrorMessage());
         }
@@ -862,17 +865,16 @@ class InnerDataField1View extends WatchUi.DataField {
 
         mEngine.markAlertSentForCurrentItem();
         triggerAlert(item);
-        var shown = false;
+        // Aviso global: lanzar el popup nativo DataFieldAlert SIEMPRE (también en
+        // modo auto-consume). Es la única vía CIQ para que el aviso aparezca
+        // sobre la pantalla activa cuando el usuario está mirando otro data
+        // field, el mapa o el resumen — caso de uso real del ciclista.
+        // El overlay propio del campo sigue actuando como refuerzo al volver.
+        var shown = showDueItemAlert(item, null);
         if (mAutoConsumePlannedItems) {
-            // In auto-consume mode we render a custom in-field overlay per product.
-            // Same-minute siblings are staggered ~30s apart so each gets its own alert.
-            shown = true;
-            System.println("Using in-field overlay alert (staggered per product)");
-        } else {
-            shown = showDueItemAlert(item, null);
-            if (!shown) {
-                System.println("Native DataField alert unavailable; using AHORA fallback");
-            }
+            System.println("Auto-consume: native DataFieldAlert + in-field overlay");
+        } else if (!shown) {
+            System.println("Native DataField alert unavailable; using AHORA fallback");
         }
 
         if (mAutoConsumePlannedItems) {
@@ -1066,30 +1068,34 @@ class InnerDataField1View extends WatchUi.DataField {
     }
 
     private function getBackgroundColor() as Graphics.ColorType {
+        // Tema oscuro unificado: los iconos PNG tienen fondo negro propio,
+        // así que fundir el fondo del campo con ese tono evita la "caja negra"
+        // y mejora el contraste de las métricas en marcha (típico data field
+        // Garmin de ciclismo: fondo oscuro + texto claro + acentos por categoría).
         var plan = mEngine.getPlan();
         if (plan == null || !plan.hasItems()) {
-            return 0xF5F6F8;
+            return 0x0B1220;
         }
 
         if (mEngine.isComplete()) {
-            return 0xEAF7EE;
+            return 0x0E1A1A;
         }
 
         var currentItem = mEngine.getCurrentItem();
         if (currentItem == null) {
-            return 0xF5F6F8;
+            return 0x0B1220;
         }
 
         if (currentItem.state == "due") {
-            return 0xFFF6D9;
+            return 0x1A0F00;
         }
 
         var timeToItem = currentItem.scheduledTime - mEngine.getElapsedSeconds();
         if (timeToItem <= 30) {
-            return 0xFFF0E1;
+            return 0x16100A;
         }
 
-        return 0xF5F6F8;
+        return 0x0B1220;
     }
 
     private function drawNoPlan(dc as Graphics.Dc, width as Number, height as Number, textColor as Graphics.ColorType) as Void {
@@ -1148,7 +1154,7 @@ class InnerDataField1View extends WatchUi.DataField {
         );
 
         // ── Detail line(s) ──────────────────────────────────────────────────
-        dc.setColor(0x6B7280, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(0xCBD5E1, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             centerX,
             height * 0.65,
@@ -1234,7 +1240,7 @@ class InnerDataField1View extends WatchUi.DataField {
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
             height * 0.86,
@@ -1270,7 +1276,7 @@ class InnerDataField1View extends WatchUi.DataField {
         if (mUseQuickDemoPlan) { headerName = BuildInfo.getBuild(); }
         headerName = truncateText(headerName, 14);
         var headerText = headerName + "  " + mEngine.getCurrentIndexOneBased() + "/" + plan.getItemCount();
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
             height * 0.09,
@@ -1331,9 +1337,14 @@ class InnerDataField1View extends WatchUi.DataField {
             return;
         }
 
-        var targetSize = (height * 0.14).toNumber();
-        if (targetSize < 28) { targetSize = 28; }
-        if (targetSize > 42) { targetSize = 42; }
+        // Icono grande sin caja (los PNG vienen con fondo oscuro propio que
+        // se funde con el fondo dark del campo). Tamaño responsive: ~22% del
+        // lado menor de la pantalla; mínimo 48 px (visible), máximo 110 px
+        // (legible en marcha) en pantallas grandes tipo Edge 1040.
+        var minSide = width < height ? width : height;
+        var targetSize = (minSide * 0.22).toNumber();
+        if (targetSize < 48) { targetSize = 48; }
+        if (targetSize > 110) { targetSize = 110; }
 
         var x = ((width / 2) - (targetSize / 2)).toNumber();
         var y = (height * 0.22).toNumber();
@@ -1373,11 +1384,11 @@ class InnerDataField1View extends WatchUi.DataField {
         var naLine = naRate.format("%.0f") + "mg/h  " + consumedNa + "mg";
 
         // Rate labels
-        dc.setColor(0x6B7280, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(0xCBD5E1, Graphics.COLOR_TRANSPARENT);
         dc.drawText(centerX, row1Y, mFont,
             "CHO " + choLine,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.setColor(0x6B7280, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(0xCBD5E1, Graphics.COLOR_TRANSPARENT);
         dc.drawText(centerX, row2Y, mFont,
             "Na " + naLine,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
@@ -1401,7 +1412,7 @@ class InnerDataField1View extends WatchUi.DataField {
             footerLabel = "CUENTA ATRAS OFF";
         }
 
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
             height * 0.73,
@@ -1568,7 +1579,7 @@ class InnerDataField1View extends WatchUi.DataField {
             dc.setColor(accentColor, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
                 width / 2,
-                height * 0.62,
+                height * 0.58,
                 Graphics.FONT_XTINY,
                 nutriLine,
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
@@ -1576,8 +1587,8 @@ class InnerDataField1View extends WatchUi.DataField {
         }
 
         // ── "TOMAR AHORA" full-width action strip ─────────────────────────────
-        var stripY = (height * 0.70).toNumber();
-        var stripH = (height * 0.15).toNumber();
+        var stripY = (height * 0.66).toNumber();
+        var stripH = (height * 0.13).toNumber();
         if (stripH < 18) { stripH = 18; }
         dc.setColor(accentColor, accentColor);
         dc.fillRectangle((width * 0.04).toNumber(), stripY, (width * 0.92).toNumber(), stripH);
@@ -1590,17 +1601,37 @@ class InnerDataField1View extends WatchUi.DataField {
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
 
-        // ── Accumulated totals below strip ────────────────────────────────────
-        var consumedCHO = mEngine.getConsumedCHO();
-        var consumedNa  = mEngine.getConsumedNa();
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(
-            width / 2,
-            height * 0.89,
-            Graphics.FONT_XTINY,
-            "Acum " + consumedCHO + "g CHO  " + consumedNa + "mg Na",
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
+        // ── Rate metrics row (CHO/h · Na/h · ml/h, large, high-contrast) ─────
+        // Tasas grandes legibles en marcha; etiquetas pequeñas. ml/h se llena
+        // sólo cuando el item es de tipo bebida (el backend envía nutrients.ml).
+        // Layout responsive: en pantallas circulares (relojes) se aprietan las
+        // columnas hacia el centro y se suben para no caer fuera del círculo.
+        var elapsedSeconds = mEngine.getElapsedSeconds();
+        var choRate = mEngine.getCHORate(elapsedSeconds);
+        var naRate = mEngine.getNaRate(elapsedSeconds);
+        var mlRate = mEngine.getMlRate(elapsedSeconds);
+        var settings = System.getDeviceSettings();
+        var isRound = settings != null && settings.screenShape == System.SCREEN_SHAPE_ROUND;
+        var metricY = isRound ? (height * 0.80).toNumber() : (height * 0.87).toNumber();
+        var labelY = isRound ? (height * 0.88).toNumber() : (height * 0.96).toNumber();
+        var metricFont = height > 250 ? Graphics.FONT_LARGE : Graphics.FONT_MEDIUM;
+        var x1 = isRound ? (width * 0.25).toNumber() : (width / 6).toNumber();
+        var x2 = (width / 2).toNumber();
+        var x3 = isRound ? (width * 0.75).toNumber() : ((width * 5) / 6).toNumber();
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(x1, metricY, metricFont, choRate.format("%.0f"),
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(x2, metricY, metricFont, naRate.format("%.0f"),
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(x3, metricY, metricFont, mlRate.format("%.0f"),
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.setColor(0xCBD5E1, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(x1, labelY, Graphics.FONT_XTINY, "g CHO/h",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(x2, labelY, Graphics.FONT_XTINY, "mg Na/h",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(x3, labelY, Graphics.FONT_XTINY, "ml/h",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
     private function getCachedDueIcon(item as NutritionItem) {
@@ -1797,7 +1828,7 @@ class InnerDataField1View extends WatchUi.DataField {
         );
 
         // ── Item name ─────────────────────────────────────────────────────────
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
             width / 2,
             cardY + (cardH * 0.15) + contentBlockOffsetY,
@@ -1839,7 +1870,7 @@ class InnerDataField1View extends WatchUi.DataField {
 
 
         if (mDebugOverlayTiming) {
-            dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
                 cardX + 6,
                 cardY + 6,
@@ -1868,7 +1899,7 @@ class InnerDataField1View extends WatchUi.DataField {
 
 
         if (icon == null) {
-            dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
                 centerX,
                 boxY + (boxSize / 2),

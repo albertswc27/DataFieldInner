@@ -44,6 +44,21 @@ class AlertHelper {
         }
     }
     
+    // Encender retroiluminación brevemente para que el aviso sea visible
+    // aunque la pantalla esté apagada o atenuada (caso típico en ciclismo
+    // de día con auto-dim agresivo). Garmin libera el control después,
+    // así que no hay que apagarla manualmente.
+    static function triggerBacklight() as Void {
+        if (Attention has :backlight) {
+            try {
+                Attention.backlight(true);
+                System.println("Backlight ON for alert");
+            } catch (e) {
+                System.println("Backlight error: " + e.getErrorMessage());
+            }
+        }
+    }
+
     // Trigger audio tone
     static function triggerSound() as Void {
         if (Attention has :playTone) {
