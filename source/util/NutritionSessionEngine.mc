@@ -15,6 +15,7 @@ class NutritionSessionEngine {
 
     hidden var _consumedCHO as Number;
     hidden var _consumedNa as Number;
+    hidden var _consumedMl as Number;
     hidden var _consumedCount as Number;
     hidden var _skippedCount as Number;
     hidden var _missedCount as Number;
@@ -30,6 +31,7 @@ class NutritionSessionEngine {
         _alertCatchupGraceSec = 45;
         _consumedCHO = 0;
         _consumedNa = 0;
+        _consumedMl = 0;
         _consumedCount = 0;
         _skippedCount = 0;
         _missedCount = 0;
@@ -68,6 +70,7 @@ class NutritionSessionEngine {
         _currentIndex = 0;
         _consumedCHO = 0;
         _consumedNa = 0;
+        _consumedMl = 0;
         _consumedCount = 0;
         _skippedCount = 0;
         _missedCount = 0;
@@ -458,6 +461,10 @@ class NutritionSessionEngine {
         return _consumedNa;
     }
 
+    function getConsumedMl() as Number {
+        return _consumedMl;
+    }
+
     function getConsumedCount() as Number {
         return _consumedCount;
     }
@@ -478,6 +485,10 @@ class NutritionSessionEngine {
         return calculateRollingRate(elapsedSeconds, "na");
     }
 
+    function getMlRate(elapsedSeconds as Number) as Float {
+        return calculateRollingRate(elapsedSeconds, "ml");
+    }
+
     function isComplete() as Boolean {
         return _plan != null && _currentIndex >= _plan.items.size();
     }
@@ -492,18 +503,22 @@ class NutritionSessionEngine {
 
         var cho = item.getNutrient("cho");
         var na = item.getNutrient("na");
+        var ml = item.getNutrient("ml");
         _consumedCHO += cho;
         _consumedNa += na;
+        _consumedMl += ml;
 
         _consumptionHistory.add({
             "time" => consumedAt,
             "cho" => cho,
-            "na" => na
+            "na" => na,
+            "ml" => ml
         });
 
         System.println(
             "LOG: totals updated CHO=" + _consumedCHO +
             " Na=" + _consumedNa +
+            " Ml=" + _consumedMl +
             " count=" + _consumedCount
         );
     }
